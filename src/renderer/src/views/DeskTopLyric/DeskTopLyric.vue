@@ -145,6 +145,7 @@
 
 <script setup lang="ts">
 import SvgIcon from '@renderer/components/SvgIcon.vue'
+import { listen } from '@tauri-apps/api/event'
 import { reactive, ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useWindowSize, useRafFn, useTimeoutFn, useDebounceFn, useThrottleFn } from '@vueuse/core'
 import type { ComponentPublicInstance } from 'vue'
@@ -275,7 +276,39 @@ const applyDesktopLyricOption = (option: any) => {
   lyricConfig.alwaysShowPlayInfo = merged.alwaysShowPlayInfo ?? lyricConfig.alwaysShowPlayInfo
 }
 
-const emitDesktopLyricEvent = (_eventName: string, ..._args: any[]) => {}
+const emitDesktopLyricEvent = (eventName: string, ...args: any[]) => {
+  const dl = window.api.desktopLyric
+  if (!dl) return
+  
+  switch (eventName) {
+    case 'win-show':
+      window.api.show()
+      break
+    case 'closeDesktopLyric':
+      dl.close()
+      break
+    case 'toogleDesktopLyricLock':
+      dl.setLock(args[0])
+      break
+    case 'update-window-height':
+      dl.setHeight(args[0])
+      break
+    case 'move-window':
+      dl.setBounds(args[0], args[1], args[2], args[3])
+      break
+    case 'lyric-window-ready':
+      dl.ready()
+      break
+    case 'set-desktop-lyric-option':
+      dl.setOption(args[0], args[1] ?? false)
+      break
+    case 'send-main-event':
+      dl.sendToMain(args[0], ...args.slice(1))
+      break
+    default:
+      console.log('Unhandled emitDesktopLyricEvent:', eventName, args)
+  }
+}
 
 const isHovered = ref<boolean>(false)
 const isInitializing = ref(true)
@@ -807,7 +840,14 @@ const toggleLyricLock = async () => {
   lyricConfig.isLock = next
 }
 
+let unlistens: any[] = []
+const trackUnlisten = (p: Promise<any>) => p.then((u) => unlistens.push(u))
+
 onMounted(() => {
+  window.api.desktopLyric?.getOption().then((opt: any) => {
+    if (opt) applyDesktopLyricOption(opt)
+  })
+  
   applyDesktopLyricOption(readDesktopLyricOption())
   updateCachedBounds()
   useTimeoutFn(() => {
@@ -823,6 +863,58 @@ onMounted(() => {
   document.addEventListener('pointerdown', onDocPointerDown)
   document.addEventListener('mousemove', handleMouseMove)
   document.addEventListener('mouseleave', handleMouseLeave)
+  
+  trackUnlisten(listen('play-song-change', (event: any) => {
+    const data = event.payload
+    lyricData.playName = data?.name || ''
+    lyricData.artistName = data?.artist || ''
+  }))
+
+  trackUnlisten(listen('play-lyric-change', (event: any) => {
+    const lines = event.payload
+    lyricData.lrcData = lines || []
+    lyricData.yrcData =
+      Array.isArray(lines) && lines.some((l) => Array.isArray(l.words) && l.words.length > 1)
+        ? lines
+        : []
+    lyricData.lyricLoading = false
+    if (isInitializing.value) isInitializing.value = false
+  }))
+
+  trackUnlisten(listen('play-lyric-index', (event: any) => {
+    lyricData.lyricIndex = event.payload
+  }))
+
+  trackUnlisten(listen('play-lyric-progress', (event: any) => {
+    const payload = event.payload
+    if (typeof payload?.currentMs === 'number') {
+      const newBase = Math.floor(payload.currentMs)
+      const drift = Math.abs(newBase - playSeekMs.value)
+      const SYNC_THRESHOLD = 300
+      if (drift > SYNC_THRESHOLD) {
+        baseMs = newBase
+        anchorTick = payload.timestamp || performance.now()
+      }
+    }
+  }))
+
+  trackUnlisten(listen('play-status-change', (event: any) => {
+    lyricData.playStatus = !!event.payload
+    if (lyricData.playStatus) {
+      resumeSeek()
+    } else {
+      pauseSeek()
+    }
+  }))
+
+  trackUnlisten(listen('desktop-lyric-option-change', (event: any) => {
+    applyDesktopLyricOption(event.payload)
+  }))
+
+  trackUnlisten(listen('toogleDesktopLyricLock', (event: any) => {
+    lyricConfig.isLock = !!event.payload
+  }))
+
   emitDesktopLyricEvent('lyric-window-ready')
 })
 
@@ -832,6 +924,11 @@ onBeforeUnmount(() => {
   document.removeEventListener('mousemove', handleMouseMove)
   document.removeEventListener('mouseleave', handleMouseLeave)
   if (dragState.isDragging) onDocPointerUp()
+  
+  for (const u of unlistens) {
+    u()
+  }
+  unlistens = []
 })
 </script>
 

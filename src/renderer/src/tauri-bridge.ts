@@ -5,6 +5,7 @@ import { open } from '@tauri-apps/plugin-dialog'
 // @ts-ignore
 import musicSdk from './services/musicSdk/index'
 import CryptoJS from 'crypto-js'
+import { sizeFormate } from './services'
 
 // Helper to generate UUID-like IDs using native Web Crypto API
 function uuidv4() {
@@ -769,12 +770,19 @@ async function runBuiltinMusicSdk(apiName: string, args: any = {}) {
   throw new Error(`SDK method ${apiName} not found`)
 }
 
+function subscribe(event: string, handler: (payload: any) => void) {
+  const unlisten = listen(event, (e) => handler(e.payload))
+  return () => {
+    unlisten.then((f) => f())
+  }
+}
+
 const api = {
   minimize: () => invoke('window_minimize'),
   maximize: () => invoke('window_maximize'),
   close: () => invoke('window_close'),
   setMiniMode: (isMini: boolean) => {
-    console.log('Tauri setMiniMode:', isMini)
+    invoke('window_set_mini_mode', { isMini })
   },
   show: () => invoke('window_show'),
   toggleFullscreen: () => {
@@ -784,7 +792,19 @@ const api = {
     return () => {}
   },
   onMusicCtrl: (callback: (event: any, ...args: any[]) => void) => {
-    return () => {}
+    const unlistens: Promise<() => void>[] = []
+    const playEvents = ['play', 'pause', 'toggle', 'playPrev', 'playNext', 'volumeDelta', 'seekDelta', 'setPlayMode']
+    for (const eventName of playEvents) {
+      const u = listen(eventName, (event) => {
+        callback({ name: eventName, payload: event.payload })
+      })
+      unlistens.push(u)
+    }
+    return () => {
+      for (const u of unlistens) {
+        u.then(f => f())
+      }
+    }
   },
   powerSaveBlocker: {
     start: async () => 1,
@@ -798,8 +818,13 @@ const api = {
   },
   musicCache: {
     getInfo: async () => ({}),
-    clear: async () => {},
-    getSize: async () => '0 B',
+    clear: async () => {
+      await invoke('clear_cache')
+    },
+    getSize: async () => {
+      const bytes: any = await invoke('get_cache_size')
+      return sizeFormate(bytes)
+    },
   },
   file: {
     readFile: (path: string) => invoke('read_file', { path }),
@@ -809,53 +834,41 @@ const api = {
     pauseTask: (taskId: string) => invoke('download_pause_task', { id: taskId }),
     resumeTask: (taskId: string) => invoke('download_resume_task', { id: taskId }),
     cancelTask: (taskId: string) => invoke('download_cancel_task', { id: taskId }),
-    deleteTask: (taskId: string) => invoke('download_cancel_task', { id: taskId }),
-    pauseAllTasks: async () => {},
-    resumeAllTasks: async () => {},
+    deleteTask: (taskId: string, deleteFile = false) => invoke('download_delete_task', { id: taskId, deleteFile }),
+    pauseAllTasks: async () => {
+      await invoke('download_pause_all')
+    },
+    resumeAllTasks: async () => {
+      await invoke('download_resume_all')
+    },
     retryTask: async (taskId: string) => invoke('download_resume_task', { id: taskId }),
     setMaxConcurrent: async (max: number) => {
       invoke('set_config', { key: 'download.maxConcurrent', value: max })
     },
     getMaxConcurrent: () => invoke('get_config', { key: 'download.maxConcurrent', default: 3 }),
-    clearTasks: async () => {},
-    validateFiles: async () => [],
-    openFileLocation: async () => {},
-    onTaskAdded: (callback: (event: any, task: any) => void) => {
-      const unlisten = listen('download-status-changed', (event) => callback(null, event.payload))
-      return () => {
-        unlisten.then((f) => f())
-      }
+    clearTasks: async (typeStr: string) => {
+      await invoke('download_clear_tasks', { typeStr })
     },
-    onTaskProgress: (callback: (event: any, task: any) => void) => {
-      const unlisten = listen('download-progress', (event) => callback(null, event.payload))
-      return () => {
-        unlisten.then((f) => f())
-      }
+    validateFiles: async () => {
+      return await invoke('download_validate_files')
     },
-    onTaskStatusChanged: (callback: (event: any, task: any) => void) => {
-      const unlisten = listen('download-status-changed', (event) => callback(null, event.payload))
-      return () => {
-        unlisten.then((f) => f())
-      }
+    openFileLocation: async (path: string) => {
+      await invoke('download_open_file_location', { path })
     },
-    onTaskCompleted: (callback: (event: any, task: any) => void) => {
-      const unlisten = listen('download-status-changed', (event) => callback(null, event.payload))
-      return () => {
-        unlisten.then((f) => f())
-      }
-    },
-    onTaskError: (callback: (event: any, task: any) => void) => {
-      const unlisten = listen('download-error', (event) => callback(null, event.payload))
-      return () => {
-        unlisten.then((f) => f())
-      }
-    },
-    onTaskDeleted: (callback: (event: any, taskId: string) => void) => {
-      return () => {}
-    },
-    onTasksReset: (callback: (event: any, tasks: any[]) => void) => {
-      return () => {}
-    },
+    onTaskAdded: (callback: (event: any, task: any) => void) =>
+      subscribe('download-task-added', (p) => callback(null, p)),
+    onTaskProgress: (callback: (event: any, task: any) => void) =>
+      subscribe('download-task-progress', (p) => callback(null, p)),
+    onTaskStatusChanged: (callback: (event: any, task: any) => void) =>
+      subscribe('download-task-status-changed', (p) => callback(null, p)),
+    onTaskCompleted: (callback: (event: any, task: any) => void) =>
+      subscribe('download-task-completed', (p) => callback(null, p)),
+    onTaskError: (callback: (event: any, task: any) => void) =>
+      subscribe('download-task-error', (p) => callback(null, p)),
+    onTaskDeleted: (callback: (event: any, taskId: string) => void) =>
+      subscribe('download-deleted', (p) => callback(null, p)),
+    onTasksReset: (callback: (event: any, tasks: any[]) => void) =>
+      subscribe('download-tasks-reset', (p) => callback(null, p)),
   },
   songList: {
     create: async (name: string, description = '', source = 'local', meta = {}) => {
@@ -908,12 +921,17 @@ const api = {
       return { success: true }
     },
     updateCover: async (hashId: string, coverImgUrl: string) => {
+      await invoke('db_playlist_update_cover', { playlistId: hashId, coverPath: coverImgUrl })
       return { success: true }
     },
     search: async (keyword: string, source?: string) => {
-      return { success: true, data: [] }
+      const list: any[] = await invoke('db_playlist_search', { query: keyword })
+      return { success: true, data: list }
     },
-    getStatistics: async () => ({ success: true, data: {} }),
+    getStatistics: async () => {
+      const data = await invoke('db_playlist_get_statistics')
+      return { success: true, data }
+    },
     exists: async (hashId: string) => {
       const data = await invoke('db_playlist_get_by_id', { id: hashId })
       return { success: true, data: data !== null }
@@ -942,6 +960,7 @@ const api = {
       return { success: true }
     },
     clearSongs: async (hashId: string) => {
+      await invoke('db_playlist_clear_songs', { playlistId: hashId })
       return { success: true }
     },
     getSongs: async (hashId: string) => {
@@ -971,18 +990,25 @@ const api = {
       return { success: true, data: song }
     },
     searchSongs: async (hashId: string, keyword: string) => {
-      return { success: true, data: [] }
+      const data = await invoke('db_playlist_search_songs', { playlistId: hashId, query: keyword })
+      return { success: true, data }
     },
-    getSongStatistics: async (hashId: string) => ({ success: true, data: {} }),
+    getSongStatistics: async (hashId: string) => {
+      const data = await invoke('db_playlist_get_song_statistics', { playlistId: hashId })
+      return { success: true, data }
+    },
     validateIntegrity: async (hashId: string) => ({ success: true }),
     repairData: async (hashId: string) => ({ success: true }),
     forceSave: async (hashId: string) => ({ success: true }),
-    reorderSongs: async (hashId: string, songmids: (string | number)[]) => ({
-      success: true,
-    }),
-    moveSong: async (hashId: string, songmid: string | number, toIndex: number) => ({
-      success: true,
-    }),
+    reorderSongs: async (hashId: string, songmids: (string | number)[]) => {
+      const list = songmids.map(mid => String(mid))
+      await invoke('db_playlist_reorder_songs', { playlistId: hashId, songIds: list })
+      return { success: true }
+    },
+    moveSong: async (hashId: string, songmid: string | number, toIndex: number) => {
+      await invoke('db_playlist_move_song', { playlistId: hashId, songmid: String(songmid), toIndex })
+      return { success: true }
+    },
     getFavoritesId: async () => {
       const id = await invoke('get_config', {
         key: 'favoritesHashId',
@@ -1024,16 +1050,36 @@ const api = {
     stop: () => {},
   },
   directorySettings: {
-    getDirectories: async () => ({
-      downloadDir: 'downloads',
-      cacheDir: 'cache',
-    }),
-    selectCacheDir: async () => '',
-    selectDownloadDir: async () => '',
-    saveDirectories: async () => true,
-    resetDirectories: async () => true,
-    openDirectory: async () => {},
-    getDirectorySize: async () => '0 B',
+    getDirectories: async () => {
+      const downloadDir = await invoke('get_config', { key: 'download.dir', default: 'downloads' })
+      const cacheDir = await invoke('get_config', { key: 'cache.dir', default: 'cache' })
+      return { downloadDir, cacheDir }
+    },
+    selectCacheDir: async () => {
+      const selected = await open({ directory: true, multiple: false })
+      return selected || ''
+    },
+    selectDownloadDir: async () => {
+      const selected = await open({ directory: true, multiple: false })
+      return selected || ''
+    },
+    saveDirectories: async (dirs: any) => {
+      if (dirs.downloadDir) await invoke('set_config', { key: 'download.dir', value: dirs.downloadDir })
+      if (dirs.cacheDir) await invoke('set_config', { key: 'cache.dir', value: dirs.cacheDir })
+      return true
+    },
+    resetDirectories: async () => {
+      await invoke('set_config', { key: 'download.dir', value: 'downloads' })
+      await invoke('set_config', { key: 'cache.dir', value: 'cache' })
+      return true
+    },
+    openDirectory: async (path: string) => {
+      await invoke('open_folder', { path })
+    },
+    getDirectorySize: async (path: string) => {
+      const bytes: any = await invoke('get_folder_size', { path })
+      return sizeFormate(bytes)
+    },
   },
   localMusic: {
     selectDirs: async () => {
@@ -1085,9 +1131,9 @@ const api = {
     removeBatchMatchListeners: () => {},
   },
   pluginNotice: {
-    onPluginNotice: () => () => {},
-    onPluginThrottle: () => () => {},
-    onPluginDisabled: () => () => {},
+    onPluginNotice: (callback: (data: any) => void) => subscribe('plugin-notice', (p) => callback(p)),
+    onPluginThrottle: (callback: (data: any) => void) => subscribe('plugin-throttle', (p) => callback(p)),
+    onPluginDisabled: (callback: (data: any) => void) => subscribe('plugin-disabled', (p) => callback(p)),
   },
   systemAudio: {
     prepareCapture: async () => '',
@@ -1095,17 +1141,25 @@ const api = {
   },
   share: {
     getPluginCodeAndMd5: async () => ({ error: 'Not supported' }),
-    onShareOpen: () => () => {},
-    onPlaylistShareOpen: () => () => {},
-    getPending: async () => [],
-    getPendingPlaylistShares: async () => [],
+    onShareOpen: (callback: (payload: { id: string }) => void) => subscribe('share-open', (p) => callback(p)),
+    onPlaylistShareOpen: (callback: (payload: { id: string }) => void) =>
+      subscribe('playlist-share-open', (p) => callback(p)),
+    getPending: async () => invoke('get_pending_share_ids'),
+    getPendingPlaylistShares: async () => invoke('get_pending_playlist_share_ids'),
   },
   listenTogether: {
-    onShareOpen: () => () => {},
-    getPendingCodes: async () => [],
+    onShareOpen: (callback: (payload: { code: string }) => void) =>
+      subscribe('lt-share-open', (p) => callback(p)),
+    getPendingCodes: async () => invoke('get_pending_lt_codes'),
   },
   clipboard: {
-    readText: async () => '',
+    readText: async () => {
+      try {
+        return await navigator.clipboard.readText()
+      } catch {
+        return ''
+      }
+    },
   },
   thumbar: {
     setState: () => {},
@@ -1114,8 +1168,22 @@ const api = {
   },
   app: {
     getVersion: () => invoke('get_app_version'),
-    setTitle: () => {},
+    setTitle: (title: string) => invoke('window_set_title', { title }),
     setProgress: () => {},
+  },
+  desktopLyric: {
+    getOption: () => invoke('get_desktop_lyric_option'),
+    setOption: (option: any, callback = false) => invoke('set_desktop_lyric_option', { option, callback }),
+    getLockState: () => invoke('get_lyric_lock_state'),
+    getOpenState: () => invoke('get_lyric_open_state'),
+    getWindowBounds: () => invoke('get_window_bounds'),
+    saveWindowBounds: (bounds: any) => invoke('save_window_bounds', { bounds }),
+    setBounds: (x: number, y: number, w: number, h: number) => invoke('lyric_window_set_bounds', { x, y, w, h }),
+    setHeight: (height: number) => invoke('lyric_window_set_height', { height }),
+    setLock: (isLock: boolean) => invoke('lyric_window_set_lock', { isLock }),
+    close: () => invoke('lyric_window_close'),
+    ready: () => invoke('lyric_window_ready'),
+    sendToMain: (name: string, ...args: any[]) => invoke('lyric_window_send_to_main', { name, args }),
   },
   music: {
     requestSdk: async (apiName: string, args: any) => {
@@ -1318,7 +1386,7 @@ const api = {
         }
       }
     },
-    onDeepLinkAdd: () => () => {},
+    onDeepLinkAdd: (callback: (payload: any) => void) => subscribe('plugin-notice', (p) => callback(p)),
   },
   ai: {
     ask: async () => '',

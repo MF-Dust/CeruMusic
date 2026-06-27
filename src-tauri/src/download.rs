@@ -366,3 +366,147 @@ fn write_audio_tags(file_path: &str, song_info: &Value) {
         }
     }
 }
+
+#[tauri::command]
+pub fn download_delete_task(id: String, delete_file: bool, app: AppHandle) -> Result<(), String> {
+    let manager = app.state::<DownloadManager>();
+    
+    // If it's active, remove it from active downloads and trigger cancel
+    let mut active = manager.active_downloads.lock().unwrap();
+    if let Some(cancel_tx) = active.remove(&id) {
+        let _ = cancel_tx.send(());
+    }
+    drop(active);
+
+    let mut tasks = manager.tasks.lock().unwrap();
+    let mut file_path = None;
+    if let Some(task) = tasks.remove(&id) {
+        file_path = Some(task.file_path);
+    }
+    drop(tasks);
+    manager.save();
+
+    if let Some(p) = file_path {
+        // Remove temp file
+        let _ = fs::remove_file(format!("{p}.temp"));
+        if delete_file {
+            let _ = fs::remove_file(p);
+        }
+    }
+
+    let _ = app.emit("download-deleted", id);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn download_clear_tasks(type_str: String, app: AppHandle) -> Result<(), String> {
+    let manager = app.state::<DownloadManager>();
+    let mut tasks = manager.tasks.lock().unwrap();
+    let mut active = manager.active_downloads.lock().unwrap();
+    
+    let mut ids_to_remove = Vec::new();
+    for (id, task) in tasks.iter() {
+        let should_remove = match type_str.as_str() {
+            "completed" => task.status == "completed",
+            "failed" => task.status == "failed" || task.status == "error",
+            "cancelled" => task.status == "cancelled",
+            "paused" => task.status == "paused",
+            "all" => true,
+            _ => false,
+        };
+        if should_remove {
+            ids_to_remove.push(id.clone());
+        }
+    }
+
+    for id in &ids_to_remove {
+        if let Some(cancel_tx) = active.remove(id) {
+            let _ = cancel_tx.send(());
+        }
+        tasks.remove(id);
+    }
+    drop(tasks);
+    drop(active);
+    manager.save();
+
+    // Emit a reset event with the new task list
+    let tasks_list = manager.get_tasks();
+    let _ = app.emit("download-tasks-reset", tasks_list);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn download_pause_all(app: AppHandle) -> Result<(), String> {
+    let manager = app.state::<DownloadManager>();
+    let tasks = manager.get_tasks();
+    for task in tasks {
+        if task.status == "queued" || task.status == "downloading" {
+            let _ = download_pause_task(task.id, app.clone());
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn download_resume_all(app: AppHandle) -> Result<(), String> {
+    let manager = app.state::<DownloadManager>();
+    let tasks = manager.get_tasks();
+    for task in tasks {
+        if task.status == "paused" || task.status == "failed" || task.status == "cancelled" {
+            let _ = download_resume_task(task.id, app.clone());
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn download_validate_files(app: AppHandle) -> Result<Vec<DownloadTask>, String> {
+    let manager = app.state::<DownloadManager>();
+    let mut tasks = manager.tasks.lock().unwrap();
+    let mut changed = false;
+    for task in tasks.values_mut() {
+        if task.status == "completed" {
+            let path = Path::new(&task.file_path);
+            if !path.exists() {
+                task.status = "failed".to_string();
+                let _ = app.emit("download-status-changed", task.id.clone());
+                changed = true;
+            }
+        }
+    }
+    drop(tasks);
+    if changed {
+        manager.save();
+    }
+    Ok(manager.get_tasks())
+}
+
+#[tauri::command]
+pub fn download_open_file_location(path: String) -> Result<(), String> {
+    let p = Path::new(&path);
+    if p.exists() {
+        #[cfg(target_os = "windows")]
+        {
+            let _ = std::process::Command::new("explorer")
+                .arg("/select,")
+                .arg(path)
+                .spawn();
+        }
+        #[cfg(target_os = "macos")]
+        {
+            let _ = std::process::Command::new("open")
+                .arg("-R")
+                .arg(path)
+                .spawn();
+        }
+        #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+        {
+            if let Some(parent) = p.parent() {
+                let _ = std::process::Command::new("xdg-open")
+                    .arg(parent)
+                    .spawn();
+            }
+        }
+    }
+    Ok(())
+}

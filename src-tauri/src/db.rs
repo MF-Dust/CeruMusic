@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 use rusqlite::{params, Connection, Result};
-use serde_json::Value;
+use serde_json::{json, Value};
 use tauri::{AppHandle, Manager};
 
 pub struct DatabaseManager {
@@ -312,26 +312,28 @@ pub fn db_playlist_get_all(app: AppHandle) -> Result<Vec<Value>, String> {
     Ok(list)
 }
 
+fn playlist_row_to_value(row: &rusqlite::Row) -> rusqlite::Result<Value> {
+    let meta_str: String = row.get(5)?;
+    let meta_val: Value = serde_json::from_str(&meta_str).unwrap_or(Value::Null);
+
+    let mut map = serde_json::Map::new();
+    map.insert("id".to_string(), Value::String(row.get(0)?));
+    map.insert("name".to_string(), Value::String(row.get(1)?));
+    map.insert("description".to_string(), Value::String(row.get(2)?));
+    map.insert("coverImgUrl".to_string(), Value::String(row.get(3)?));
+    map.insert("source".to_string(), Value::String(row.get(4)?));
+    map.insert("meta".to_string(), meta_val);
+    map.insert("createTime".to_string(), Value::String(row.get(6)?));
+    map.insert("updateTime".to_string(), Value::String(row.get(7)?));
+    Ok(Value::Object(map))
+}
+
 #[tauri::command]
 pub fn db_playlist_get_by_id(id: String, app: AppHandle) -> Result<Value, String> {
     let db = app.state::<DatabaseManager>();
     let conn = db.get_playlist_conn().map_err(|e| e.to_string())?;
     let mut stmt = conn.prepare("SELECT * FROM playlists WHERE id = ?").map_err(|e| e.to_string())?;
-    let row = stmt.query_row([id], |row| {
-        let meta_str: String = row.get(5)?;
-        let meta_val: Value = serde_json::from_str(&meta_str).unwrap_or(Value::Null);
-
-        let mut map = serde_json::Map::new();
-        map.insert("id".to_string(), Value::String(row.get(0)?));
-        map.insert("name".to_string(), Value::String(row.get(1)?));
-        map.insert("description".to_string(), Value::String(row.get(2)?));
-        map.insert("coverImgUrl".to_string(), Value::String(row.get(3)?));
-        map.insert("source".to_string(), Value::String(row.get(4)?));
-        map.insert("meta".to_string(), meta_val);
-        map.insert("createTime".to_string(), Value::String(row.get(6)?));
-        map.insert("updateTime".to_string(), Value::String(row.get(7)?));
-        Ok(Value::Object(map))
-    });
+    let row = stmt.query_row([id], playlist_row_to_value);
 
     match row {
         Ok(v) => Ok(v),
@@ -425,4 +427,228 @@ pub fn db_playlist_song_remove(playlist_id: String, songmid: String, app: AppHan
         [playlist_id, songmid],
     ).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[tauri::command]
+pub fn db_playlist_update_cover(playlist_id: String, cover_path: String, app: AppHandle) -> Result<(), String> {
+    let db = app.state::<DatabaseManager>();
+    let conn = db.get_playlist_conn().map_err(|e| e.to_string())?;
+    let now = chrono::Utc::now().to_rfc3339();
+    conn.execute(
+        "UPDATE playlists SET coverImgUrl = ?, updateTime = ? WHERE id = ?",
+        params![cover_path, now, playlist_id],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn db_playlist_search(query: String, app: AppHandle) -> Result<Vec<Value>, String> {
+    let db = app.state::<DatabaseManager>();
+    let conn = db.get_playlist_conn().map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare(
+        "SELECT * FROM playlists WHERE name LIKE ? OR description LIKE ? ORDER BY createTime ASC"
+    ).map_err(|e| e.to_string())?;
+    let q = format!("%{}%", query);
+    let rows = stmt.query_map(params![q, q], playlist_row_to_value).map_err(|e| e.to_string())?;
+
+    Ok(rows.filter_map(|r| r.ok()).collect())
+}
+
+#[tauri::command]
+pub fn db_playlist_get_statistics(app: AppHandle) -> Result<Value, String> {
+    let db = app.state::<DatabaseManager>();
+    let conn = db.get_playlist_conn().map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare("SELECT source, COUNT(*) FROM playlists GROUP BY source").map_err(|e| e.to_string())?;
+    let rows = stmt.query_map([], |row| {
+        let source: String = row.get(0)?;
+        let count: i32 = row.get(1)?;
+        Ok((source, count))
+    }).map_err(|e| e.to_string())?;
+
+    let mut by_source = serde_json::Map::new();
+    let mut total = 0;
+    for r in rows {
+        if let Ok((src, count)) = r {
+            by_source.insert(src, json!(count));
+            total += count;
+        }
+    }
+
+    let now = chrono::Utc::now().to_rfc3339();
+    Ok(json!({
+        "total": total,
+        "bySource": Value::Object(by_source),
+        "lastUpdated": now
+    }))
+}
+
+#[tauri::command]
+pub fn db_playlist_clear_songs(playlist_id: String, app: AppHandle) -> Result<(), String> {
+    let db = app.state::<DatabaseManager>();
+    let conn = db.get_playlist_conn().map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM playlist_songs WHERE playlist_id = ?", [playlist_id]).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn db_playlist_search_songs(playlist_id: String, query: String, app: AppHandle) -> Result<Vec<Value>, String> {
+    let db = app.state::<DatabaseManager>();
+    let conn = db.get_playlist_conn().map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare(
+        "SELECT data FROM playlist_songs 
+         WHERE playlist_id = ? 
+           AND (name LIKE ? OR singer LIKE ? OR albumName LIKE ?)
+         ORDER BY position ASC"
+    ).map_err(|e| e.to_string())?;
+    
+    let q = format!("%{}%", query);
+    let rows = stmt.query_map(params![playlist_id, q, q, q], |row| {
+        let s: String = row.get(0)?;
+        Ok(serde_json::from_str::<Value>(&s).unwrap_or(Value::Null))
+    }).map_err(|e| e.to_string())?;
+
+    Ok(rows.filter_map(|r| r.ok()).collect())
+}
+
+#[tauri::command]
+pub fn db_playlist_get_song_statistics(playlist_id: String, app: AppHandle) -> Result<Value, String> {
+    let db = app.state::<DatabaseManager>();
+    let conn = db.get_playlist_conn().map_err(|e| e.to_string())?;
+    
+    let total: i32 = conn.query_row(
+        "SELECT COUNT(*) FROM playlist_songs WHERE playlist_id = ?",
+        [&playlist_id],
+        |row| row.get(0)
+    ).unwrap_or(0);
+
+    let mut stmt_singer = conn.prepare(
+        "SELECT singer, COUNT(*) FROM playlist_songs WHERE playlist_id = ? AND singer != '' GROUP BY singer"
+    ).map_err(|e| e.to_string())?;
+    let rows_singer = stmt_singer.query_map([&playlist_id], |row| {
+        let singer: String = row.get(0)?;
+        let count: i32 = row.get(1)?;
+        Ok((singer, count))
+    }).map_err(|e| e.to_string())?;
+    let mut by_singer = serde_json::Map::new();
+    for r in rows_singer {
+        if let Ok((singer, count)) = r {
+            by_singer.insert(singer, json!(count));
+        }
+    }
+
+    let mut stmt_album = conn.prepare(
+        "SELECT albumName, COUNT(*) FROM playlist_songs WHERE playlist_id = ? AND albumName != '' GROUP BY albumName"
+    ).map_err(|e| e.to_string())?;
+    let rows_album = stmt_album.query_map([&playlist_id], |row| {
+        let album: String = row.get(0)?;
+        let count: i32 = row.get(1)?;
+        Ok((album, count))
+    }).map_err(|e| e.to_string())?;
+    let mut by_album = serde_json::Map::new();
+    for r in rows_album {
+        if let Ok((album, count)) = r {
+            by_album.insert(album, json!(count));
+        }
+    }
+
+    let now = chrono::Utc::now().to_rfc3339();
+    Ok(json!({
+        "total": total,
+        "bySinger": Value::Object(by_singer),
+        "byAlbum": Value::Object(by_album),
+        "lastModified": now
+    }))
+}
+
+#[tauri::command]
+pub fn db_playlist_reorder_songs(playlist_id: String, song_ids: Vec<String>, app: AppHandle) -> Result<i32, String> {
+    let db = app.state::<DatabaseManager>();
+    let mut conn = db.get_playlist_conn().map_err(|e| e.to_string())?;
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    
+    let mut updated = 0;
+    {
+        let mut stmt = tx.prepare(
+            "UPDATE playlist_songs SET position = ? WHERE playlist_id = ? AND songmid = ?"
+        ).map_err(|e| e.to_string())?;
+        
+        for (pos, songmid) in song_ids.iter().enumerate() {
+            let changes = stmt.execute(params![pos as i32, playlist_id, songmid]).map_err(|e| e.to_string())?;
+            updated += changes as i32;
+        }
+    }
+    
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(updated)
+}
+
+#[tauri::command]
+pub fn db_playlist_move_song(
+    playlist_id: String,
+    songmid: String,
+    to_index: i32,
+    app: AppHandle,
+) -> Result<bool, String> {
+    let db = app.state::<DatabaseManager>();
+    let mut conn = db.get_playlist_conn().map_err(|e| e.to_string())?;
+    
+    let cur_pos: Option<i32> = conn.query_row(
+        "SELECT position FROM playlist_songs WHERE playlist_id = ? AND songmid = ?",
+        params![playlist_id, songmid],
+        |row| row.get(0)
+    ).ok();
+    
+    let cur_pos = match cur_pos {
+        Some(p) => p,
+        None => return Ok(false),
+    };
+
+    let total: i32 = conn.query_row(
+        "SELECT COUNT(*) FROM playlist_songs WHERE playlist_id = ?",
+        params![playlist_id],
+        |row| row.get(0)
+    ).unwrap_or(0);
+
+    if total <= 0 {
+        return Ok(false);
+    }
+    let clamped = std::cmp::max(0, std::cmp::min(to_index, total - 1));
+
+    let target_pos: Option<i32> = conn.query_row(
+        "SELECT position FROM playlist_songs WHERE playlist_id = ? ORDER BY position ASC LIMIT 1 OFFSET ?",
+        params![playlist_id, clamped],
+        |row| row.get(0)
+    ).ok();
+
+    let target_pos = match target_pos {
+        Some(p) => p,
+        None => return Ok(false),
+    };
+
+    if cur_pos == target_pos {
+        return Ok(false);
+    }
+
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    {
+        if cur_pos < target_pos {
+            tx.execute(
+                "UPDATE playlist_songs SET position = position - 1 
+                 WHERE playlist_id = ? AND position > ? AND position <= ?",
+                params![playlist_id, cur_pos, target_pos]
+            ).map_err(|e| e.to_string())?;
+        } else {
+            tx.execute(
+                "UPDATE playlist_songs SET position = position + 1 
+                 WHERE playlist_id = ? AND position >= ? AND position < ?",
+                params![playlist_id, target_pos, cur_pos]
+            ).map_err(|e| e.to_string())?;
+        }
+        tx.execute(
+            "UPDATE playlist_songs SET position = ? WHERE playlist_id = ? AND songmid = ?",
+            params![target_pos, playlist_id, songmid]
+        ).map_err(|e| e.to_string())?;
+    }
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(true)
 }
