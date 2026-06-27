@@ -16,3 +16,7 @@ temp/log.txt
 /.idea/
 docs/.vitepress/dist
 docs/.vitepress/cache
+
+# Tauri / Rust
+src-tauri/target/
+

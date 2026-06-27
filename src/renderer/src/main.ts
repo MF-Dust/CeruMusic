@@ -1,3 +1,4 @@
+import './tauri-bridge'
 // 基础样式
 import './assets/base.css'
 import 'animate.css'

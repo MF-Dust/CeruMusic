@@ -14,7 +14,7 @@ export {
   dateFormat,
   formatPlayCount,
   dateFormat2
-} from '../utils'
+} from '../index.ts'
 
 const sources = {
   sources: [
