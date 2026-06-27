@@ -14,8 +14,8 @@ import {
   ChevronDownIcon,
   PenBallIcon
 } from 'tdesign-icons-vue-next'
-import _ from 'lodash'
 import { storeToRefs } from 'pinia'
+import { debounce } from '@renderer/utils/helpers'
 import { useSettingsStore } from '@renderer/store/Settings'
 import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'
 import { useDlnaStore } from '@renderer/store/dlna'
@@ -815,7 +815,7 @@ const handleWindowFocus = () => {
 // --- 后台暂停动画逻辑 End ---
 
 // 保存 debounce 函数引用以便后续移除
-const debouncedCheckOverflow = _.debounce(checkOverflow, 200)
+const debouncedCheckOverflow = debounce(checkOverflow, 200)
 
 onMounted(() => {
   window.addEventListener('resize', debouncedCheckOverflow)

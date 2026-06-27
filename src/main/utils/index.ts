@@ -69,3 +69,32 @@ export function formatPlayCount(num: number | string): string {
 export function dateFormat2(timestamp: number | string | Date): string {
   return dateFormat(timestamp, 'yyyy-MM-dd')
 }
+
+// ponytail: lightweight promise concurrency limiter to replace p-limit
+export function pLimit(concurrency: number) {
+  const queue: (() => void)[] = []
+  let active = 0
+
+  const next = () => {
+    active--
+    if (queue.length > 0) {
+      queue.shift()!()
+    }
+  }
+
+  return <T>(fn: () => Promise<T>): Promise<T> => {
+    return new Promise<T>((resolve, reject) => {
+      const run = () => {
+        active++
+        fn().then(resolve, reject).finally(next)
+      }
+
+      if (active < concurrency) {
+        run()
+      } else {
+        queue.push(run)
+      }
+    })
+  }
+}
+

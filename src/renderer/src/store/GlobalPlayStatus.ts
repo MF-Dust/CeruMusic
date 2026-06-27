@@ -5,7 +5,6 @@ import { parseYrc, parseLrc, parseTTML, parseQrc } from '@applemusic-like-lyrics
 import type { SongList } from '@renderer/types/audio'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { reactive, computed, watch, toRaw, type ComputedRef } from 'vue'
-import _ from 'lodash'
 import defaultCover from '@renderer/assets/images/song.jpg'
 import { playSetting } from './playSetting'
 

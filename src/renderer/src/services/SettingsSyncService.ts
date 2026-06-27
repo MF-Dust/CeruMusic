@@ -1,5 +1,5 @@
 import { watch } from 'vue'
-import { isEqual, debounce } from 'lodash'
+import { isEqual, debounce } from '@renderer/utils/helpers'
 import { Request } from '@renderer/utils/request'
 import { useSettingsStore } from '@renderer/store/Settings'
 import { playSetting as usePlaySettingStore } from '@renderer/store/playSetting'

@@ -48,7 +48,6 @@ import {
   EditIcon,
   RefreshIcon
 } from 'tdesign-icons-vue-next'
-import _ from 'lodash'
 import { songListAPI } from '@renderer/api/songList'
 import { useDlnaStore } from '@renderer/store/dlna'
 import { crossfadeState, crossfadeManager } from '@renderer/utils/audio/crossfade'
@@ -690,7 +689,7 @@ const onToggleLike = async () => {
       }
     } else {
       const addRes = await songListAPI.addSongs(favoritesId!, [
-        _.cloneDeep(toRaw(currentSong)) as any
+        structuredClone(toRaw(currentSong)) as any
       ])
       if (addRes.success) {
         likeState.value = true
@@ -707,7 +706,7 @@ const onToggleLike = async () => {
 
 const onDownload = async () => {
   try {
-    await downloadSingleSong(_.cloneDeep(toRaw(songInfo.value)) as any)
+    await downloadSingleSong(structuredClone(toRaw(songInfo.value)) as any)
     MessagePlugin.success('开始下载当前歌曲')
   } catch (e: any) {
     console.error('下载失败:', e)
@@ -911,7 +910,7 @@ const switchQuality = async (quality: string) => {
   }
 
   try {
-    const newUrl = await getSongRealUrl(_.cloneDeep(toRaw(currentSong)) as any)
+    const newUrl = await getSongRealUrl(structuredClone(toRaw(currentSong)) as any)
     if (!newUrl || (typeof newUrl === 'string' && newUrl.includes('error'))) {
       throw new Error('获取播放链接失败')
     }

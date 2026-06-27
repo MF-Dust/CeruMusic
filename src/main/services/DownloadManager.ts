@@ -1,7 +1,7 @@
+import { EventEmitter } from 'node:events'
 import { Worker } from 'worker_threads'
 import path from 'node:path'
-import { EventEmitter } from 'node:events'
-import { v4 as uuidv4 } from 'uuid'
+import { randomUUID } from 'crypto'
 
 const workerPath = path.join(__dirname, 'downloadWorker.js')
 
@@ -176,7 +176,7 @@ export default class DownloadManager extends EventEmitter {
     }
 
     const task: DownloadTask = {
-      id: uuidv4(),
+      id: randomUUID(),
       songInfo,
       url,
       pluginId,

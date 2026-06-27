@@ -9,7 +9,6 @@
 import * as vm from 'vm'
 import * as crypto from 'crypto'
 import { parentPort, isMainThread } from 'worker_threads'
-import fetch from 'node-fetch'
 
 if (isMainThread) {
   throw new Error('pluginWorker.ts must be run inside a worker_thread')
