@@ -136,11 +136,16 @@ fn main() {
             http_proxy::tauri_request,
 
             // Plugin File System Commands
+            plugins::plugin_select_and_add,
+            plugins::plugin_download_and_add,
             plugins::plugin_load_all,
             plugins::plugin_save,
+            plugins::plugin_save_metadata,
             plugins::plugin_delete,
             plugins::plugin_get_config,
-            plugins::plugin_save_config
+            plugins::plugin_save_config,
+            plugins::plugin_get_log,
+            plugins::plugin_append_log
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

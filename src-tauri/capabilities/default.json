@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default permissions for Ceru Music desktop windows",
+  "windows": ["main", "lyric-window", "recognition-worker"],
+  "permissions": ["core:default", "dialog:default", "dialog:allow-open", "dialog:allow-save"]
+}
