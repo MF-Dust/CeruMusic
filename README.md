@@ -4,7 +4,7 @@
 
 ## 项目简介
 
-Ceru Music 是基于 Electron 和 Vue 开发的跨平台桌面音乐播放器工具，**仅提供插件运行框架与播放功能**，不直接存储、提供任何音乐源文件。用户需通过自行选择、安装合规插件获取音乐相关数据，项目旨在为开发者提供桌面应用技术实践与学习案例，为用户提供合规的音乐播放工具框架。
+Ceru Music 是基于 Tauri、Rust 和 Vue 开发的跨平台桌面音乐播放器工具，**仅提供插件运行框架与播放功能**，不直接存储、提供任何音乐源文件。用户需通过自行选择、安装合规插件获取音乐相关数据，项目旨在为开发者提供桌面应用技术实践与学习案例，为用户提供合规的音乐播放工具框架。
 
 <img src="assets/image-20251003173109619.png" alt="image-20251003173109619" style="zoom:33%;" />
 
@@ -16,7 +16,7 @@ Ceru Music 是基于 Electron 和 Vue 开发的跨平台桌面音乐播放器工
 
 ## 技术栈
 
-- **Electron**：用于构建跨平台桌面应用
+- **Tauri + Rust**：用于构建跨平台桌面应用与本地能力
 - **Vue 3**：前端框架，提供响应式 UI
 - **TypeScript**：增强代码可维护性和类型安全
 - **Pinia**：状态管理工具
@@ -44,53 +44,6 @@ CeruMuisc/
     │   │   │   ├── common.ts
     │   │   │   ├── nodejs.ts
     │   │   │   └── renderer.ts
-    │   │   └── index.ts
-    │   ├── main/
-    │   │   ├── events/
-    │   │   │   ├── ai.ts
-    │   │   │   ├── autoUpdate.ts
-    │   │   │   ├── directorySettings.ts
-    │   │   │   ├── musicCache.ts
-    │   │   │   ├── pluginNotice.ts
-    │   │   │   └── songList.ts
-    │   │   ├── services/
-    │   │   │   ├── music/
-    │   │   │   │   ├── index.ts
-    │   │   │   │   ├── net-ease-service.ts
-    │   │   │   │   └── service-base.ts
-    │   │   │   ├── musicCache/
-    │   │   │   │   └── index.ts
-    │   │   │   ├── musicSdk/
-    │   │   │   │   ├── index.ts
-    │   │   │   │   ├── service.ts
-    │   │   │   │   └── type.ts
-    │   │   │   ├── plugin/
-    │   │   │   │   ├── manager/
-    │   │   │   │   │   ├── CeruMusicPluginHost.ts
-    │   │   │   │   │   └── converter-event-driven.ts
-    │   │   │   │   ├── index.ts
-    │   │   │   │   └── logger.ts
-    │   │   │   ├── songList/
-    │   │   │   │   ├── ManageSongList.ts
-    │   │   │   │   └── PlayListSongs.ts
-    │   │   │   ├── ai-service.ts
-    │   │   │   └── ConfigManager.ts
-    │   │   ├── utils/
-    │   │   │   ├── musicSdk/
-    │   │   │   │   ├── api-source-info.ts
-    │   │   │   │   ├── index.js
-    │   │   │   │   ├── options.js
-    │   │   │   │   └── utils.js
-    │   │   │   ├── array.ts
-    │   │   │   ├── index.ts
-    │   │   │   ├── object.ts
-    │   │   │   ├── path.ts
-    │   │   │   ├── request.js
-    │   │   │   └── utils.ts
-    │   │   ├── autoUpdate.ts
-    │   │   └── index.ts
-    │   ├── preload/
-    │   │   ├── index.d.ts
     │   │   └── index.ts
     │   ├── renderer/
     │   │   ├── public/
@@ -198,19 +151,17 @@ CeruMuisc/
     │   ├── pluginDev.html
     │   ├── script.js
     │   └── styles.css
-    ├── electron-builder.yml
-    ├── electron.vite.config.ts
+    ├── src-tauri/
     ├── eslint.config.js
     ├── LICENSE
-    ├── package-lock.json
     ├── package.json
+    ├── pnpm-lock.yaml
     ├── qodana.sarif.json
     ├── qodana.yaml
     ├── README.md
     ├── tsconfig.json
     ├── tsconfig.node.json
-    ├── tsconfig.web.json
-    └── yarn.lock
+    └── tsconfig.web.json
 ```
 
 </details>
@@ -231,7 +182,7 @@ CeruMuisc/
 
 - **IDE**: VS Code 或 WebStorm
 - **Node.js 版本**: 22 及以上
-- **包管理器**: **yarn**
+- **包管理器**: **pnpm**
 - **项目后端**: 欢迎对接[https://api.ceru.shiqianjiang.cn/api-docs](https://api.ceru.shiqianjiang.cn/api-docs)
 
 ### 项目设置
@@ -239,40 +190,26 @@ CeruMuisc/
 1. 安装依赖：
 
    ```bash
-   yarn install
+   pnpm install
    ```
 
 2. 启动开发服务器：
 
    ```bash
-   yarn dev
+   pnpm dev
    ```
 
 3. 构建应用：
 
    ```bash
-   yarn build
+   pnpm build
    ```
 
-### 平台构建指令
+### 前端单独构建
 
-- Windows
-
-  ```bash
-  yarn build:win
-  ```
-
-- macOS
-
-  ```bash
-  yarn build:mac
-  ```
-
-- Linux
-
-  ```bash
-  yarn build:linux
-  ```
+```bash
+pnpm web:build
+```
 
 > 提示：构建后的应用仅包含播放器框架，需用户自行配置合规插件方可获取音乐数据。
 

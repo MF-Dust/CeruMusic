@@ -4,6 +4,7 @@ mod config;
 mod db;
 mod http_proxy;
 mod scan;
+mod local_music;
 mod download;
 mod plugins;
 
@@ -64,6 +65,7 @@ fn read_file(path: String) -> Result<Vec<u8>, String> {
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             // Initialize states
             let app_handle = app.handle().clone();
@@ -109,6 +111,19 @@ fn main() {
 
             // Scanner Commands
             scan::scan_directories,
+
+            // Local Music Commands
+            local_music::local_music_scan,
+            local_music::local_music_get_dirs,
+            local_music::local_music_set_dirs,
+            local_music::local_music_get_list,
+            local_music::local_music_get_url,
+            local_music::local_music_clear_index,
+            local_music::local_music_get_cover,
+            local_music::local_music_get_covers,
+            local_music::local_music_get_tags,
+            local_music::local_music_get_lyric,
+            local_music::local_music_write_tags,
 
             // Download Commands
             download::download_get_tasks,

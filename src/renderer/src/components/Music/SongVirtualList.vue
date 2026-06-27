@@ -338,7 +338,6 @@ import { MessagePlugin } from 'tdesign-vue-next'
 import { cloudSongListAPI, type CloudSongList } from '@renderer/api/cloudSongList'
 import { syncLocalMetaWithCloudUpdate } from '@renderer/utils/playlist/cloudSyncHelper'
 import { mapSongsToCloud } from '@renderer/utils/playlist/cloudList'
-import { useAuthStore } from '@renderer/store'
 import { useSettingsStore } from '@renderer/store/Settings'
 import ShareSongDialog from '@renderer/components/Share/ShareSongDialog.vue'
 
@@ -1054,19 +1053,11 @@ const closeContextMenu = () => {
 
 // 加载歌单列表
 const loadPlaylists = async () => {
-  const AuthStore = useAuthStore()
   try {
-    async function getCloudSongList() {
-      if (!AuthStore.isAuthenticated) return []
-      return await cloudSongListAPI.getUserSongLists().catch((err) => {
-        MessagePlugin.error(err.message || '获取云歌单失败')
-        return []
-      })
-    }
-    const [localRes, cloudRes] = await Promise.all([songListAPI.getAll(), getCloudSongList()])
+    const localRes = await songListAPI.getAll()
 
     const localLists = (localRes.success ? localRes.data : []) || []
-    const cloudLists: CloudSongList[] = Array.isArray(cloudRes) ? cloudRes : []
+    const cloudLists: CloudSongList[] = []
 
     // Merge Logic
     const mergedLists: SongList[] = []

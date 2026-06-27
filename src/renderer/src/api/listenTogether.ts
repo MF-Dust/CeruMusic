@@ -2,7 +2,7 @@
  * 一起听 REST API 客户端
  *
  * 走 ceru-backend 的 /api/listen-together/* 接口，
- * 复用项目自带的 Request 类（已封装 Logto 鉴权 + 错误处理）。
+ * 复用项目自带的 Request 类。
  *
  * 接口：
  *  - createRoom         POST /create

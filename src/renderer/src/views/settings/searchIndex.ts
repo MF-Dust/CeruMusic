@@ -49,21 +49,6 @@ export const searchItems: SearchItem[] = [
     keywords: ['桌面', '歌词', 'desktop']
   },
 
-  // AI
-  {
-    id: 'ai-api-config',
-    category: 'ai',
-    title: 'DeepSeek API 配置',
-    description: '配置您的 DeepSeek API Key 以使用 AI 功能',
-    keywords: ['key', 'token', '人工智能']
-  },
-  {
-    id: 'ai-floatball',
-    category: 'ai',
-    title: 'AI 浮球设置',
-    keywords: ['悬浮', '助手']
-  },
-
   // Playback
   {
     id: 'playback-playlist',

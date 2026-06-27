@@ -60,7 +60,7 @@ function initListeners(): void {
   if (initialized || typeof window === 'undefined') return
   initialized = true
 
-  /* 初始值：document.hasFocus 在 Electron renderer 里可用 */
+  /* 初始值：Tauri WebView 支持 document.hasFocus */
   isFocused = typeof document !== 'undefined' ? document.hasFocus() : true
 
   window.addEventListener('focus', () => {
@@ -99,10 +99,9 @@ async function ensurePermission(): Promise<NotificationPermission> {
 /**
  * 用 WebAudio 合成的提示音 —— 不依赖外部音频文件,也不依赖系统通知自带声音
  *
- * 背景:Electron/Chromium 的 Notification 在 Windows 上即使 silent=false,
- * 没有正确注册 AppUserModelId/SetCurrentProcessExplicitAppUserModelID 时
- * 也常常静音。直接在 renderer 用 WebAudio 合成一个轻量的"叮咚"声(两个
- * 短促正弦音),既能跨平台稳定播放,也避免引入 mp3 资源。
+ * 背景:不同桌面 WebView/系统通知实现对 silent=false 的支持不一致。
+ * 直接在 renderer 用 WebAudio 合成一个轻量的"叮咚"声(两个短促正弦音),
+ * 既能跨平台稳定播放,也避免引入 mp3 资源。
  *
  * 音效设计:
  *  - 第一段 880Hz(高 A) → 第二段 1175Hz(更高 D),50ms 间隔,各 120ms
@@ -214,12 +213,10 @@ async function fireNotification(
 
   try {
     /* 关键:requireInteraction 默认开 —— 这样通知不会立刻滑进 Windows 操作中心,
-     * 而是粘在桌面右下角直到用户点击/关闭。
+   * 而是尽量停留在桌面直到用户点击/关闭。
      *
-     * 为什么:Chromium Notification 一旦进入"操作中心",从中心点击多数情况下
-     * 不会再触发 renderer 的 onclick(Windows 需要 toast XML + AUMID 注册才能保留),
-     * 表现为"普通消息通知点不进软件"。强制 requireInteraction 让通知在弹出阶段
-     * 保留焦点窗口,onclick 才能稳定生效。
+     * 为什么:部分 Windows 通知中心实现从历史通知点击时不会再触发 renderer 的
+     * onclick。强制 requireInteraction 让通知在弹出阶段保留点击入口。
      *
      * 为了避免一直占着屏幕,普通消息我们在 6s 后程序化 close(),
      * 强提示消息(mention)不自动 close,让它一直挂着。 */

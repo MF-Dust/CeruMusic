@@ -60,7 +60,7 @@ git pull --rebase     # 与远端 main 对齐
 ### 本地预览 Release body
 
 ```bash
-yarn release:preview v1.14.0
+pnpm release:preview v1.14.0
 # 或
 bash scripts/preview-release-notes.sh v1.14.0
 ```

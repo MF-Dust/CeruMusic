@@ -317,39 +317,12 @@ const toggleComments = () => {
   }
 }
 
-// 桌面歌词开关与锁定状态
 const desktopLyricOpen = ref(false)
 const desktopLyricLocked = ref(false)
+const desktopLyricSupported = false
 
-// 桌面歌词按钮逻辑：
-// - 若未打开：打开桌面歌词
-// - 若已打开且锁定：先解锁，不关闭
-// - 若已打开且未锁定：关闭桌面歌词
-const toggleDesktopLyric = async () => {
-  try {
-    if (!desktopLyricOpen.value) {
-      window.electron?.ipcRenderer?.send?.('change-desktop-lyric', true)
-      desktopLyricOpen.value = true
-      // 恢复最新锁定状态
-      const lock = await window.electron?.ipcRenderer?.invoke?.('get-lyric-lock-state')
-      desktopLyricLocked.value = !!lock
-      return
-    }
-    // 已打开
-    const lock = await window.electron?.ipcRenderer?.invoke?.('get-lyric-lock-state')
-    desktopLyricLocked.value = !!lock
-    if (desktopLyricLocked.value) {
-      // 先解锁，本次不关闭
-      window.electron?.ipcRenderer?.send?.('toogleDesktopLyricLock', false)
-      desktopLyricLocked.value = false
-      return
-    }
-    // 未锁定则关闭
-    window.electron?.ipcRenderer?.send?.('change-desktop-lyric', false)
-    desktopLyricOpen.value = false
-  } catch (e) {
-    console.error('切换桌面歌词失败:', e)
-  }
+const toggleDesktopLyric = () => {
+  console.warn('Desktop lyric window is not available in the Tauri runtime yet')
 }
 // 等待音频准备就绪
 // 播放位置恢复逻辑由全局播放管理器处理
@@ -468,9 +441,6 @@ const closePlaylist = () => {
 // 全局快捷控制事件由全局播放管理器处理
 // 初始化播放器
 
-let lyricLockHandler: ((_: any, lock: any) => void) | null = null
-let lyricOpenChangeHandler: ((_: any, visible: boolean) => void) | null = null
-let lyricCloseHandler: (() => void) | null = null
 let openPlaylistHandler: (() => void) | null = null
 let closePlaylistHandler: (() => void) | null = null
 let unsubSlotSwap: (() => void) | null = null
@@ -483,34 +453,7 @@ function globalControls(e) {
   }
 }
 
-onMounted(async () => {
-  // 监听来自主进程的锁定状态广播
-  lyricLockHandler = (_: any, lock: any) => {
-    desktopLyricLocked.value = !!lock
-  }
-  lyricOpenChangeHandler = async (_: any, visible: boolean) => {
-    desktopLyricOpen.value = !!visible
-    if (desktopLyricOpen.value) {
-      const lock = await window.electron?.ipcRenderer?.invoke?.('get-lyric-lock-state')
-      desktopLyricLocked.value = !!lock
-    } else {
-      desktopLyricLocked.value = false
-    }
-  }
-  lyricCloseHandler = () => {
-    desktopLyricOpen.value = false
-    desktopLyricLocked.value = false
-  }
-  window.electron?.ipcRenderer?.on?.('toogleDesktopLyricLock', lyricLockHandler)
-  window.electron?.ipcRenderer?.on?.('desktop-lyric-open-change', lyricOpenChangeHandler)
-  window.electron?.ipcRenderer?.on?.('closeDesktopLyric', lyricCloseHandler)
-  // 初始化同步当前打开与锁定状态
-  try {
-    const open = await window.electron?.ipcRenderer?.invoke?.('get-lyric-open-state')
-    desktopLyricOpen.value = !!open
-    const lock = await window.electron?.ipcRenderer?.invoke?.('get-lyric-lock-state')
-    desktopLyricLocked.value = !!lock
-  } catch {}
+onMounted(() => {
   window.addEventListener('global-music-control', globalControls)
   openPlaylistHandler = () => {
     showPlaylist.value = true
@@ -541,18 +484,6 @@ onMounted(async () => {
 
 // 组件卸载时清理
 onUnmounted(() => {
-  if (lyricLockHandler) {
-    window.electron?.ipcRenderer?.removeListener?.('toogleDesktopLyricLock', lyricLockHandler)
-  }
-  if (lyricOpenChangeHandler) {
-    window.electron?.ipcRenderer?.removeListener?.(
-      'desktop-lyric-open-change',
-      lyricOpenChangeHandler
-    )
-  }
-  if (lyricCloseHandler) {
-    window.electron?.ipcRenderer?.removeListener?.('closeDesktopLyric', lyricCloseHandler)
-  }
   window.removeEventListener('global-music-control', globalControls)
   if (openPlaylistHandler) window.removeEventListener('open-playlist', openPlaylistHandler)
   if (closePlaylistHandler) window.removeEventListener('close-playlist', closePlaylistHandler)
@@ -564,9 +495,6 @@ onUnmounted(() => {
     unsubCanPlay()
     unsubCanPlay = null
   }
-  lyricLockHandler = null
-  lyricOpenChangeHandler = null
-  lyricCloseHandler = null
   openPlaylistHandler = null
   closePlaylistHandler = null
 
@@ -1749,14 +1677,20 @@ watch(showFullPlay, (val) => {
           <!-- 桌面歌词开关按钮 -->
           <t-tooltip
             :content="
-              desktopLyricOpen ? (desktopLyricLocked ? '解锁歌词' : '关闭桌面歌词') : '打开桌面歌词'
+              desktopLyricSupported
+                ? desktopLyricOpen
+                  ? desktopLyricLocked
+                    ? '解锁歌词'
+                    : '关闭桌面歌词'
+                  : '打开桌面歌词'
+                : '桌面歌词暂不可用'
             "
           >
             <t-button
               class="control-btn lyric-btn"
               shape="circle"
               variant="text"
-              :disabled="!songInfo.songmid"
+              :disabled="!desktopLyricSupported || !songInfo.songmid"
               @click.stop="toggleDesktopLyric"
             >
               <SvgIcon name="lyricOpen" size="18"></SvgIcon>

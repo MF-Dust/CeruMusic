@@ -21,7 +21,7 @@
 ## BUILD
 
 ```bash
-yarn docs:preview # preview built output
+pnpm docs:preview # preview built output
 ```
 
 ## CONVENTIONS

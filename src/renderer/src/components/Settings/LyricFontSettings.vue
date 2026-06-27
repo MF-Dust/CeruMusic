@@ -96,28 +96,18 @@ const fontOptions = computed(() => {
 })
 
 const handleFontChange = () => {
-  // Automatically saved by the setter of the computed property
   MessagePlugin.success('字体设置已更新')
-
-  // Sync to desktop lyric if needed (but desktop lyric reads options on open/change,
-  // currently desktop lyric doesn't know about font family)
-  // We need to send an IPC message to desktop lyric window to update font family
-
-  // Get current font family
-  const font = settings.value.lyricFontFamily
-
-  // Send IPC to main process, which forwards to lyric window or updates config
-  window.electron.ipcRenderer.send('set-desktop-lyric-font', font)
 }
 
 onMounted(async () => {
-  try {
-    const fonts = await window.electron.ipcRenderer.invoke('get-font-list')
-    fontList.value = fonts
-  } catch (e) {
-    console.error('Failed to get font list', e)
-    fontList.value = ['PingFangSC-Semibold', 'lyricfont']
-  }
+  fontList.value = [
+    'PingFangSC-Semibold',
+    'Microsoft YaHei',
+    'Segoe UI',
+    'Arial',
+    'sans-serif',
+    'lyricfont'
+  ]
 })
 </script>
 

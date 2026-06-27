@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { open } from '@tauri-apps/plugin-dialog'
 import { storeToRefs } from 'pinia'
 import { useSettingsStore } from '@renderer/store/Settings'
 
@@ -31,8 +32,8 @@ const updateMultipleBg = (updates: Partial<typeof bgSettings.value>) => {
 
 const handleFileSelect = async () => {
   try {
-    const filePaths = await window.electron.ipcRenderer.invoke('dialog:openFile', {
-      properties: ['openFile'],
+    const selected = await open({
+      multiple: false,
       filters: [
         {
           name: 'Media Files',
@@ -43,6 +44,7 @@ const handleFileSelect = async () => {
         { name: 'All Files', extensions: ['*'] }
       ]
     })
+    const filePaths = selected ? [selected] : []
     if (filePaths && filePaths.length > 0) {
       const path = filePaths[0]
       const ext = path.split('.').pop()?.toLowerCase()

@@ -61,10 +61,13 @@ src/renderer/
 ## COMMANDS (FRONTEND)
 
 ```bash
-yarn dev        # launches electron-vite dev (renderer + main)
+pnpm dev        # launches Tauri dev app
+pnpm web:dev    # launches the Vite renderer only
+pnpm web:build  # typecheck + Vite renderer build
+```
 
 ## NOTES
 - `auto-imports.d.ts` exposes Vue APIs + naive-ui helpers (`useDialog`, `useMessage`, etc.) and tdesign `DialogPlugin`.
 - `components.d.ts` registers >40 project components (Play*, Settings*, ContextMenu, etc.) plus naive-ui/tdesign components and router components; no manual import needed inside SFCs.
-- Router uses hash mode to coexist with Electron file protocol; preloading relies on `requestIdleCallback` (polyfill for Windows 7).
-```
+- Router still uses hash mode for stable desktop routing; preloading relies on `requestIdleCallback`.
+- Desktop-native capabilities should go through `window.api` and Tauri commands/plugins. Do not add Electron IPC or Node native renderer dependencies.

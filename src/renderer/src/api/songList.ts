@@ -10,16 +10,15 @@ import type {
 } from '../../../types/songList'
 import type { SongList, Songs } from '@common/types/songList'
 
-// 检查是否在 Electron 环境中
-const isElectron = typeof window !== 'undefined' && window.api && window.api.songList
+const hasSongListApi = typeof window !== 'undefined' && window.api && window.api.songList
 
 /**
  * 歌单管理 API 封装类
  */
 class SongListService implements SongListAPI {
   private get songListAPI() {
-    if (!isElectron) {
-      throw new Error('当前环境不支持 Electron API 调用')
+    if (!hasSongListApi) {
+      throw new Error('当前环境不支持歌单 API 调用')
     }
     return window.api.songList
   }

@@ -890,7 +890,6 @@ onUnmounted(() => {
         class="top"
         style="-webkit-app-region: drag"
         :color="useBlackText ? 'black' : 'white'"
-        :show-account="false"
       />
     </Transition>
     <div

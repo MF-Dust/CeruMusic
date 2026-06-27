@@ -11,7 +11,6 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
-    AIFloatBallSettings: typeof import('./src/components/Settings/AIFloatBallSettings.vue')['default']
     AudioEffectSettings: typeof import('./src/components/Settings/AudioEffectSettings.vue')['default']
     AudioMatch: typeof import('./src/components/Play/AudioMatch.vue')['default']
     AudioOutputSettings: typeof import('./src/components/Settings/AudioOutputSettings.vue')['default']
@@ -22,11 +21,9 @@ declare module 'vue' {
     ContextMenu: typeof import('./src/components/ContextMenu/ContextMenu.vue')['default']
     CrossfadeHint: typeof import('./src/components/Play/CrossfadeHint.vue')['default']
     DesktopLyricStyle: typeof import('./src/components/Settings/DesktopLyricStyle.vue')['default']
-    DevAuthInjector: typeof import('./src/components/Dev/DevAuthInjector.vue')['default']
     DirectorySettings: typeof import('./src/components/Settings/DirectorySettings.vue')['default']
     EqualizerSettings: typeof import('./src/components/Settings/EqualizerSettings.vue')['default']
     FirstRunDialog: typeof import('./src/components/FirstRunDialog.vue')['default']
-    FloatBall: typeof import('./src/components/AI/FloatBall.vue')['default']
     FullPlay: typeof import('./src/components/Play/FullPlay.vue')['default']
     GlobalAudio: typeof import('./src/components/Play/GlobalAudio.vue')['default']
     GlobalBackground: typeof import('./src/components/GlobalBackground.vue')['default']
@@ -124,7 +121,6 @@ declare module 'vue' {
     TTag: typeof import('tdesign-vue-next')['Tag']
     TTextarea: typeof import('tdesign-vue-next')['Textarea']
     TTooltip: typeof import('tdesign-vue-next')['Tooltip']
-    UserCapsule: typeof import('./src/components/Auth/UserCapsule.vue')['default']
     Versions: typeof import('./src/components/Versions.vue')['default']
   }
 }

@@ -56,11 +56,6 @@ const appRouter: RouteRecordRaw[] = [
         path: 'local/edit-tag',
         name: 'local-tag-editor',
         component: () => import('@renderer/views/music/LocalTagEditorPage.vue')
-      },
-      {
-        path: 'profile',
-        name: 'profile',
-        component: () => import('@renderer/views/user/Profile.vue')
       }
     ]
   },
@@ -169,7 +164,6 @@ const startPreload = () => {
     '/home/search',
     '/home/download',
     '/home/recent',
-    '/home/profile',
     '/home/recognize',
     '/home/list/:id',
     '/home/local/edit-tag',

@@ -17,7 +17,6 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useListenTogetherStore } from '@renderer/store/ListenTogether'
-import { useAuthStore } from '@renderer/store/Auth'
 import { SmileIcon, SendIcon } from 'tdesign-icons-vue-next'
 import { MessagePlugin } from 'tdesign-vue-next'
 import { ContextMenu } from '@renderer/components/ContextMenu'
@@ -31,7 +30,6 @@ import type { ShareDetail, PlaylistShareDetail } from '@renderer/api/share'
 import type { ChatMsg, RoomMember } from '@renderer/utils/listenTogether/types'
 
 const lt = useListenTogetherStore()
-const authStore = useAuthStore()
 const router = useRouter()
 
 /** 系统消息模板 —— 把后端 content (key) 转成可读中文 */
@@ -71,11 +69,7 @@ function renderSystem(msg: ChatMsg): string {
 
 const selfKeys = computed(() => {
   const keys = new Set<string>()
-  const user = authStore.user
   if (lt.myUserId) keys.add(String(lt.myUserId))
-  if (user?.sub) keys.add(String(user.sub))
-  if (user?.username) keys.add(String(user.username))
-  if (user?.name) keys.add(String(user.name))
   return keys
 })
 

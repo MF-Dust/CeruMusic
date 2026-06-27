@@ -53,7 +53,6 @@ import {
   resolveRoom as apiResolveRoom,
   type CreateRoomPayload
 } from '@renderer/api/listenTogether'
-import { useAuthStore } from '@renderer/store/Auth'
 import { useListenTogetherSettingsStore } from '@renderer/store/ListenTogetherSettings'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { songRefToSongList } from '@renderer/utils/listenTogether/songRef'
@@ -71,7 +70,7 @@ import type { SongList } from '@renderer/types/audio'
  *
  * Socket.IO 的连接 URL / dev-prod 切换都由 SocketRequest 内部根据
  * common/api/config.json 的 baseUrl 配置自动决定。
- * Logto resource indicator(token aud)统一从 @common/api/resources 导入。
+ * API resource 统一从 @common/api/resources 导入。
  */
 
 /**
@@ -97,7 +96,7 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
   /** 当前用户的角色（仅在房间内有效） */
   const myRole = ref<RoomRole | null>(null)
 
-  /** 我自己的 userId —— 从 logto token sub 取，加入房间后填充 */
+  /** 我自己的 userId —— 加入房间后由服务端状态填充 */
   const myUserId = ref<string>('')
 
   /** 房间成员列表 */
@@ -287,7 +286,7 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
    * 建立 Socket 连接 —— 必须先调用此方法才能进/出房
    *
    * 实际的鉴权 + 重试逻辑被抽到 `SocketRequest`(utils/request.ts):
-   *  - 复用 logto 链路取 access token
+   *  - 登录功能已移除后，该连接会在 SocketRequest 内被拒绝
    *  - dev/prod baseURL 自动切换
    *  - 首次 AUTH_FAILED 自动刷新 token 重试一次
    * 这里只负责注册业务事件 + 维护 connectionStatus 状态。
@@ -317,13 +316,6 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
     }
 
     connectionStatus.value = 'connecting'
-
-    /* 顺手同步 myUserId —— 后续 SYNC handler 用它区分 self/other 来源 */
-    const authStore = useAuthStore()
-    if (!authStore.user) {
-      await authStore.updateUserInfo()
-    }
-    myUserId.value = authStore.user?.sub || myUserId.value
 
     try {
       socket = await socketRequest.connect()
@@ -682,7 +674,7 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
   async function createAndJoin(payload: CreateRoomPayload): Promise<RoomMeta> {
     await connect()
     const room = await apiCreateRoom(payload)
-    // ownerId 即是当前 logto sub —— 我们存到 myUserId 给后续 sync 防回声用
+    // ownerId 用于后续 sync 防回声
     myUserId.value = room.ownerId
     await joinByCode(room.code)
     await syncRoomContextFromLocal()
@@ -717,13 +709,9 @@ export const useListenTogetherStore = defineStore('listenTogether', () => {
         if (settled) return
         settled = true
         cleanup()
-        if (!myUserId.value) {
-          const authStore = useAuthStore()
-          myUserId.value = authStore.user?.sub || myUserId.value
-        }
         // myUserId 此时可能未填充（resolveAndJoin 路径），从成员里反推：
         // 我是刚 join 进来的，ROOM_STATE 一定包含我，但服务器没标"我"
-        // 用 logto sub 作为权威 —— 先保留 createAndJoin 已设置的，否则不动
+        // 先保留 createAndJoin 已设置的，否则不动
         startAudioHooks()
         void runClockSyncBurst()
         startPingLoop()

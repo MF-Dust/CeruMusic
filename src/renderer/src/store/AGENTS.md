@@ -2,7 +2,7 @@
 
 ## OVERVIEW
 
-Pinia stores orchestrating player state, settings, auth, downloads, DLNA, EQ/effects, search. Persisted via `pinia-plugin-persistedstate` with selective slices.
+Pinia stores orchestrating player state, settings, auth, downloads, EQ/effects, search, and desktop integration state. Persisted via `pinia-plugin-persistedstate` with selective slices.
 
 ## STRUCTURE
 
@@ -19,7 +19,7 @@ store/
 ├── audioOutput.ts      # Device selection
 ├── Auth.ts             # Logto authentication tokens/profile
 ├── LocalUserDetail.ts  # Local favorites/playlists
-├── dlna.ts             # DLNA session state
+├── dlna.ts             # Tauri placeholder for legacy DLNA controls
 ├── search.ts           # Search history + filters
 └── Settings.test.ts    # Jest test covering Settings store
 ```
@@ -35,11 +35,11 @@ store/
 ## ANTI-PATTERNS
 
 - Don’t persist volatile state (e.g., `GlobalPlayStatus.currentLyric`)—only user settings.
-- Avoid synchronous IPC from stores; wrap `window.ceru.invoke` in services/composables.
-- Never store Electron native objects (BrowserWindow) inside Pinia; keep plain JSON.
+- Avoid direct native calls from stores; wrap Tauri commands behind `window.api` or services/composables.
+- Never store native window or plugin objects inside Pinia; keep plain JSON.
 
 ## NOTES
 
 - `Settings.test.ts` demonstrates mocking `localStorage` + verifying persist plugin integration.
 - `Auth.ts` wraps Logto SDK; ensure refresh token flows happen via provided composables, not direct fetch.
-- `dlna.ts` depends on `upnp-mediarenderer-client`; run in renderer only when connection active.
+- `dlna.ts` is currently a no-op compatibility store until a Tauri-native DLNA implementation is added.

@@ -19,7 +19,6 @@ export interface GlobalBackgroundSettings {
 }
 
 export interface SettingsState {
-  showFloatBall: boolean
   autoCacheMusic?: boolean
   directories?: {
     cacheDir: string
@@ -51,7 +50,6 @@ export const useSettingsStore = defineStore(
   () => {
     // 默认设置
     const defaultSettings: SettingsState = {
-      showFloatBall: true,
       autoCacheMusic: true,
       filenameTemplate: '%t - %s',
       tagWriteOptions: {
@@ -205,12 +203,6 @@ export const useSettingsStore = defineStore(
       saveSettings()
     }
 
-    // 切换悬浮球显示状态
-    const toggleFloatBall = () => {
-      settings.value.showFloatBall = !settings.value.showFloatBall
-      saveSettings()
-    }
-
     const isSpringFestivalWindow = () => {
       const now = new Date()
       const today = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate()
@@ -236,7 +228,6 @@ export const useSettingsStore = defineStore(
     return {
       settings,
       updateSettings,
-      toggleFloatBall,
       isSpringFestivalWindow,
       shouldUseSpringFestivalTheme,
       disableSpringFestivalTheme,

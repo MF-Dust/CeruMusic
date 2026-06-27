@@ -446,7 +446,7 @@ const scanLibrary = async () => {
   try {
     const api = (window as any).api
     if (!api || !api.localMusic || !api.localMusic.scan) {
-      MessagePlugin.error('请在Electron应用中使用本地扫描功能')
+      MessagePlugin.error('请在桌面应用中使用本地扫描功能')
       return
     }
     // clearScan()

@@ -1,7 +1,6 @@
 import js from '@eslint/js'
 import tseslint from 'typescript-eslint'
 import vue from 'eslint-plugin-vue'
-import prettier from '@electron-toolkit/eslint-config-prettier'
 
 export default [
   // 基础 JavaScript 推荐配置
@@ -27,10 +26,9 @@ export default [
       '**/*.min.js',
       '**/auto-imports.d.ts',
       '**/components.d.ts',
-      'src/preload/index.d.ts', // 忽略类型定义文件
       'src/renderer/src/assets/icon_font/**', // 忽略第三方图标字体文件
-      'src/main/utils/musicSdk/**', // 忽略第三方音乐 SDK
-      'src/main/utils/request.js', // 忽略第三方请求库
+      'src/renderer/src/services/musicSdk/**', // 忽略第三方音乐 SDK
+      'src/renderer/src/services/request.js', // 忽略第三方请求库
       'scripts/**', // 忽略脚本文件
       'src/common/utils/lyricUtils/**', // 忽略第三方歌词工具
       'src/renderer/public/**', // 忽略渲染进程公共目录
@@ -92,12 +90,12 @@ export default [
     }
   },
 
-  // 主进程 TypeScript 配置
+  // 共享 TypeScript 配置
   {
-    files: ['src/main/**/*.ts', 'src/preload/**/*.ts', 'src/common/**/*.ts', 'src/types/**/*.ts'],
+    files: ['src/common/**/*.ts', 'src/types/**/*.ts'],
     languageOptions: {
       parserOptions: {
-        project: './tsconfig.node.json',
+        project: './tsconfig.web.json',
         tsconfigRootDir: import.meta.dirname
       }
     },
@@ -179,14 +177,9 @@ export default [
     }
   },
 
-  // 主进程文件配置 (Node.js 环境)
+  // 脚本文件配置 (Node.js 环境)
   {
-    files: [
-      'src/main/**/*.{ts,js}',
-      'src/preload/**/*.{ts,js}',
-      'electron.vite.config.*',
-      'scripts/**/*.{js,ts}'
-    ],
+    files: ['scripts/**/*.{js,ts}'],
     languageOptions: {
       globals: {
         __dirname: 'readonly',
@@ -226,13 +219,10 @@ export default [
 
   // 配置文件特殊规则
   {
-    files: ['*.config.{js,ts}', 'vite.config.*', 'electron.vite.config.*'],
+    files: ['*.config.{js,ts}', 'vite.config.*'],
     rules: {
       'no-console': 'off',
       '@typescript-eslint/no-var-requires': 'off'
     }
-  },
-
-  // Prettier 配置 (必须放在最后)
-  prettier
+  }
 ]

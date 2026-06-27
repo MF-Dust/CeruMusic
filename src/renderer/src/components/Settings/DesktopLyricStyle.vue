@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 
 interface LyricOption {
   fontSize: number
@@ -79,7 +79,8 @@ const backgroundMaskStr = ref<string>('rgba(0,0,0,0.2)')
 const loadOption = async () => {
   loading.value = true
   try {
-    const res = await window.electron.ipcRenderer.invoke('get-desktop-lyric-option')
+    const raw = localStorage.getItem('desktop-lyric-option')
+    const res = raw ? JSON.parse(raw) : null
     if (res) {
       option.value = { ...option.value, ...res }
       original.value = { ...option.value }
@@ -98,13 +99,13 @@ const loadOption = async () => {
 const applyOption = () => {
   saving.value = true
   try {
-    // 传入 callback=true 让桌面歌词窗口即时更新
     const payload = {
       ...option.value,
       shadowColor: shadowColorStr.value,
       backgroundMaskColor: backgroundMaskStr.value
     }
-    window.electron.ipcRenderer.send('set-desktop-lyric-option', payload, true)
+    localStorage.setItem('desktop-lyric-option', JSON.stringify(payload))
+    original.value = { ...payload }
   } finally {
     setTimeout(() => (saving.value = false), 200)
   }
@@ -118,21 +119,12 @@ const resetOption = () => {
 
 const isOpen = ref<boolean>(false)
 watch(isOpen, (val) => {
-  window.electron?.ipcRenderer?.send?.('change-desktop-lyric', !!val)
+  localStorage.setItem('desktop-lyric-open', JSON.stringify(!!val))
 })
 
 onMounted(() => {
   loadOption()
-  // 初始化打开状态并监听变化
-  window.electron?.ipcRenderer
-    ?.invoke?.('get-lyric-open-state')
-    .then((open: boolean) => {
-      isOpen.value = !!open
-    })
-    .catch(() => {})
-  window.electron?.ipcRenderer?.on?.('desktop-lyric-open-change', (_event, open: boolean) => {
-    isOpen.value = !!open
-  })
+  isOpen.value = localStorage.getItem('desktop-lyric-open') === 'true'
 })
 </script>
 

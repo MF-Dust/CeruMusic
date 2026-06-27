@@ -248,6 +248,35 @@ const lyricConfig = reactive<LyricConfig>({
   limitBounds: true
 })
 
+const readDesktopLyricOption = () => {
+  try {
+    const raw = localStorage.getItem('desktop-lyric-option')
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+const applyDesktopLyricOption = (option: any) => {
+  if (!option) return
+  const merged = { ...option }
+  lyricConfig.fontSize = Number(merged.fontSize) || lyricConfig.fontSize
+  lyricConfig.fontWeight = merged.fontWeight ?? lyricConfig.fontWeight
+  lyricConfig.playedColor = merged.mainColor || lyricConfig.playedColor
+  lyricConfig.shadowColor = merged.shadowColor || lyricConfig.shadowColor
+  lyricConfig.fontFamily = merged.fontFamily || lyricConfig.fontFamily
+  lyricConfig.position = merged.position || lyricConfig.position
+  lyricConfig.animation = merged.animation ?? lyricConfig.animation
+  lyricConfig.showYrc = merged.showYrc ?? lyricConfig.showYrc
+  lyricConfig.showTran = merged.showTran ?? lyricConfig.showTran
+  lyricConfig.isDoubleLine = merged.isDoubleLine ?? lyricConfig.isDoubleLine
+  lyricConfig.textBackgroundMask = merged.textBackgroundMask ?? lyricConfig.textBackgroundMask
+  lyricConfig.backgroundMaskColor = merged.backgroundMaskColor || lyricConfig.backgroundMaskColor
+  lyricConfig.alwaysShowPlayInfo = merged.alwaysShowPlayInfo ?? lyricConfig.alwaysShowPlayInfo
+}
+
+const emitDesktopLyricEvent = (_eventName: string, ..._args: any[]) => {}
+
 const isHovered = ref<boolean>(false)
 const isInitializing = ref(true)
 const { start: startHoverTimer } = useTimeoutFn(
@@ -470,11 +499,12 @@ const cachedBounds = reactive({
 
 const updateCachedBounds = async () => {
   try {
-    const [winBounds, stored, workAreas] = await Promise.all([
-      window.electron?.ipcRenderer?.invoke?.('get-window-bounds'),
-      window.electron?.ipcRenderer?.invoke?.('get-desktop-lyric-option'),
-      window.electron?.ipcRenderer?.invoke?.('get-all-work-area')
-    ])
+    const winBounds = {
+      x: window.screenX || 0,
+      y: window.screenY || 0
+    }
+    const stored = readDesktopLyricOption()
+    const workAreas: any[] = []
     cachedBounds.x = winBounds?.x ?? 0
     cachedBounds.y = winBounds?.y ?? 0
     cachedBounds.width = Number(stored?.width) > 0 ? Number(stored.width) : 800
@@ -641,7 +671,7 @@ const onDocPointerMove = useThrottleFn((event: PointerEvent) => {
       newX = Math.round(Math.max(dragState.minX, Math.min(dragState.maxX - newWidth, newX)))
       newY = Math.round(Math.max(dragState.minY, Math.min(dragState.maxY - newHeight, newY)))
     }
-    window.electron?.ipcRenderer?.send?.('move-window', newX, newY, newWidth, newHeight)
+    emitDesktopLyricEvent('move-window', newX, newY, newWidth, newHeight)
     cursorStyle.value =
       dragState.resizeEdge === 'top-left' || dragState.resizeEdge === 'bottom-right'
         ? 'nwse-resize'
@@ -664,13 +694,7 @@ const onDocPointerMove = useThrottleFn((event: PointerEvent) => {
         Math.max(dragState.minY, Math.min(dragState.maxY - dragState.winHeight, newWinY))
       )
     }
-    window.electron?.ipcRenderer?.send?.(
-      'move-window',
-      newWinX,
-      newWinY,
-      dragState.winWidth,
-      dragState.winHeight
-    )
+    emitDesktopLyricEvent('move-window', newWinX, newWinY, dragState.winWidth, dragState.winHeight)
     cursorStyle.value = 'move'
   }
 }, 16)
@@ -756,7 +780,7 @@ const fontSizeToHeight = (size: number) => {
 const pushWindowHeight = (nextHeight: number) => {
   if (!Number.isFinite(nextHeight)) return
   if (dragState.isDragging) return
-  window.electron?.ipcRenderer?.send?.('update-window-height', nextHeight)
+  emitDesktopLyricEvent('update-window-height', nextHeight)
 }
 
 watch(
@@ -771,117 +795,20 @@ watch(
 )
 
 const sendToMain = (eventName: string, ...args: any[]) => {
-  window.electron?.ipcRenderer?.send?.(eventName, ...args)
+  emitDesktopLyricEvent(eventName, ...args)
 }
 const sendToMainWin = (eventName: string, ...args: any[]) => {
-  window.electron?.ipcRenderer?.send?.('send-main-event', eventName, ...args)
+  emitDesktopLyricEvent('send-main-event', eventName, ...args)
 }
 
 const toggleLyricLock = async () => {
   const next = !lyricConfig.isLock
-  window.electron?.ipcRenderer?.send?.('toogleDesktopLyricLock', next)
+  emitDesktopLyricEvent('toogleDesktopLyricLock', next)
   lyricConfig.isLock = next
 }
-// const tempToggleLyricLock = (isLock: boolean) => {
-//   if (!lyricConfig.isLock) return
-//   window.electron?.ipcRenderer?.send?.('toogleDesktopLyricLock', isLock)
-// }
 
 onMounted(() => {
-  window.electron?.ipcRenderer?.on?.(
-    'play-song-change',
-    (_event, data: { name?: string; artist?: string }) => {
-      lyricData.playName = data?.name || ''
-      lyricData.artistName = data?.artist || ''
-    }
-  )
-  window.electron?.ipcRenderer?.on?.('play-lyric-change', (_event, lines: LyricLine[]) => {
-    lyricData.lrcData = lines || []
-    // 优先把逐字歌词当作 yrcData（如果行 words 长度>1）
-    lyricData.yrcData =
-      Array.isArray(lines) && lines.some((l) => Array.isArray(l.words) && l.words.length > 1)
-        ? lines
-        : []
-    lyricData.lyricLoading = false
-    if (isInitializing.value) isInitializing.value = false
-  })
-  window.electron?.ipcRenderer?.on?.('play-lyric-index', (_event, index: number) => {
-    lyricData.lyricIndex = index
-  })
-  window.electron?.ipcRenderer?.on?.(
-    'play-lyric-progress',
-    (
-      _event,
-      payload: { index: number; progress: number; currentMs?: number; timestamp?: number }
-    ) => {
-      if (typeof payload?.currentMs === 'number') {
-        const newBase = Math.floor(payload.currentMs)
-        const drift = Math.abs(newBase - playSeekMs.value)
-        const SYNC_THRESHOLD = 300
-        if (drift > SYNC_THRESHOLD) {
-          baseMs = newBase
-          anchorTick = performance.now()
-        }
-      }
-    }
-  )
-  window.electron?.ipcRenderer?.on?.('play-status-change', (_event, status: boolean) => {
-    lyricData.playStatus = !!status
-    if (lyricData.playStatus) {
-      resumeSeek()
-    } else {
-      baseMs = playSeekMs.value
-      anchorTick = performance.now()
-      pauseSeek()
-    }
-  })
-  window.electron?.ipcRenderer?.on?.('desktop-lyric-option-change', (_event, option: any) => {
-    if (!option) return
-    const merged = { ...option }
-    lyricConfig.fontSize = Number(merged.fontSize) || lyricConfig.fontSize
-    lyricConfig.fontWeight = merged.fontWeight ?? lyricConfig.fontWeight
-    lyricConfig.playedColor = merged.mainColor || lyricConfig.playedColor
-    lyricConfig.shadowColor = merged.shadowColor || lyricConfig.shadowColor
-    lyricConfig.fontFamily = merged.fontFamily || lyricConfig.fontFamily
-    lyricConfig.position = merged.position || lyricConfig.position
-    lyricConfig.animation = merged.animation ?? lyricConfig.animation
-    lyricConfig.showYrc = merged.showYrc ?? lyricConfig.showYrc
-    lyricConfig.showTran = merged.showTran ?? lyricConfig.showTran
-    lyricConfig.isDoubleLine = merged.isDoubleLine ?? lyricConfig.isDoubleLine
-    lyricConfig.textBackgroundMask = merged.textBackgroundMask ?? lyricConfig.textBackgroundMask
-    lyricConfig.backgroundMaskColor = merged.backgroundMaskColor || lyricConfig.backgroundMaskColor
-    lyricConfig.alwaysShowPlayInfo = merged.alwaysShowPlayInfo ?? lyricConfig.alwaysShowPlayInfo
-    const height = fontSizeToHeight(lyricConfig.fontSize)
-    if (height) pushWindowHeight(height)
-  })
-  window.electron?.ipcRenderer?.on?.('set-desktop-lyric-font', (_event, font: string) => {
-    lyricConfig.fontFamily = font || lyricConfig.fontFamily
-  })
-  window.electron?.ipcRenderer?.on?.('toogleDesktopLyricLock', (_event, lock: boolean) => {
-    lyricConfig.isLock = !!lock
-  })
-  window.electron?.ipcRenderer
-    ?.invoke?.('get-desktop-lyric-option')
-    .then((opt: any) => {
-      if (opt) {
-        const merged = { ...opt }
-        lyricConfig.fontSize = Number(merged.fontSize) || lyricConfig.fontSize
-        lyricConfig.fontWeight = merged.fontWeight ?? lyricConfig.fontWeight
-        lyricConfig.playedColor = merged.mainColor || lyricConfig.playedColor
-        lyricConfig.shadowColor = merged.shadowColor || lyricConfig.shadowColor
-        lyricConfig.fontFamily = merged.fontFamily || lyricConfig.fontFamily
-        lyricConfig.position = merged.position || lyricConfig.position
-        lyricConfig.animation = merged.animation ?? lyricConfig.animation
-        lyricConfig.showYrc = merged.showYrc ?? lyricConfig.showYrc
-        lyricConfig.showTran = merged.showTran ?? lyricConfig.showTran
-        lyricConfig.isDoubleLine = merged.isDoubleLine ?? lyricConfig.isDoubleLine
-        lyricConfig.textBackgroundMask = merged.textBackgroundMask ?? lyricConfig.textBackgroundMask
-        lyricConfig.backgroundMaskColor =
-          merged.backgroundMaskColor || lyricConfig.backgroundMaskColor
-        lyricConfig.alwaysShowPlayInfo = merged.alwaysShowPlayInfo ?? lyricConfig.alwaysShowPlayInfo
-      }
-    })
-    .catch(() => {})
+  applyDesktopLyricOption(readDesktopLyricOption())
   updateCachedBounds()
   useTimeoutFn(() => {
     if (isInitializing.value) {
@@ -896,8 +823,7 @@ onMounted(() => {
   document.addEventListener('pointerdown', onDocPointerDown)
   document.addEventListener('mousemove', handleMouseMove)
   document.addEventListener('mouseleave', handleMouseLeave)
-  // 通知主进程：桌面歌词窗口已准备就绪，便于主窗口侧补发快照
-  window.electron?.ipcRenderer?.send?.('lyric-window-ready')
+  emitDesktopLyricEvent('lyric-window-ready')
 })
 
 onBeforeUnmount(() => {

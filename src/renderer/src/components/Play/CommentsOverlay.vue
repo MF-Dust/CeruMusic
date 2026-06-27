@@ -2,7 +2,6 @@
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { CloseIcon, HeartIcon } from 'tdesign-icons-vue-next'
 import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'
-import { useAuthStore } from '@renderer/store/Auth'
 import { storeToRefs } from 'pinia'
 
 const props = withDefaults(
@@ -19,7 +18,6 @@ const emit = defineEmits(['close'])
 
 const globalPlayStatus = useGlobalPlayStatusStore()
 const { player } = storeToRefs(globalPlayStatus)
-const authStore = useAuthStore()
 
 // 默认是 'hot'，如果用户切换过，下次打开保持
 // 实际上组件可能会被销毁重建，如果想持久化需要存到 store 或 localStorage
@@ -104,21 +102,7 @@ const formatNumber = (num: number) => {
 }
 
 const currentUserKeys = computed(() => {
-  const keys = new Set<string>()
-  const user = authStore.user as Record<string, unknown> | null
-  const candidates = [
-    user?.sub,
-    user?.username,
-    user?.name,
-    user?.email,
-    user?.nickname,
-    user?.preferred_username
-  ]
-  for (const candidate of candidates) {
-    if (candidate === undefined || candidate === null) continue
-    keys.add(normalizeUserKey(candidate))
-  }
-  return keys
+  return new Set<string>()
 })
 
 const normalizeUserKey = (value: unknown): string => String(value).trim().toLowerCase()

@@ -30,16 +30,20 @@ impl DatabaseManager {
 
     pub fn get_local_conn(&self) -> Result<Connection> {
         let conn = Connection::open(&self.local_music_path)?;
-        conn.execute("PRAGMA journal_mode = WAL", [])?;
-        conn.execute("PRAGMA synchronous = NORMAL", [])?;
+        conn.execute_batch(
+            "PRAGMA journal_mode = WAL;
+             PRAGMA synchronous = NORMAL;",
+        )?;
         Ok(conn)
     }
 
     fn get_playlist_conn(&self) -> Result<Connection> {
         let conn = Connection::open(&self.playlists_path)?;
-        conn.execute("PRAGMA journal_mode = WAL", [])?;
-        conn.execute("PRAGMA synchronous = NORMAL", [])?;
-        conn.execute("PRAGMA foreign_keys = ON", [])?;
+        conn.execute_batch(
+            "PRAGMA journal_mode = WAL;
+             PRAGMA synchronous = NORMAL;
+             PRAGMA foreign_keys = ON;",
+        )?;
         Ok(conn)
     }
 

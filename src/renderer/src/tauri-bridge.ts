@@ -1,8 +1,9 @@
 // @ts-nocheck
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
+import { open } from '@tauri-apps/plugin-dialog'
 // @ts-ignore
-import musicSdk from '../../main/utils/musicSdk/index'
+import musicSdk from './services/musicSdk/index'
 import CryptoJS from 'crypto-js'
 
 // Helper to generate UUID-like IDs using native Web Crypto API
@@ -427,39 +428,50 @@ const api = {
     getDirectorySize: async () => '0 B'
   },
   localMusic: {
-    selectDirs: async () => [],
-    scan: async (dirs: string[]) => {
-      await invoke('scan_directories', { dirs })
-      return []
+    selectDirs: async () => {
+      const selected = await open({ directory: true, multiple: true })
+      if (!selected) return []
+      return Array.isArray(selected) ? selected : [selected]
     },
-    writeTags: async () => true,
-    getDirs: () => invoke('db_get_dirs'),
-    setDirs: (dirs: string[]) => invoke('db_set_dirs', { dirs }),
-    getList: () => invoke('db_tracks_get_all'),
-    getUrl: (id: string | number) => `file://${id}`,
-    getUrlById: (id: string | number) => `file://${id}`,
-    clearIndex: () => invoke('db_tracks_clear'),
-    getCoverBase64: async () => '',
-    getCoversBase64: async () => ({}),
-    getTags: async () => null,
-    getLyric: async () => '',
+    scan: async (dirs: string[]) => {
+      return await invoke('local_music_scan', { dirs })
+    },
+    writeTags: (filePath: string, songInfo: any, tagWriteOptions: any) =>
+      invoke('local_music_write_tags', { filePath, songInfo, tagWriteOptions }),
+    getDirs: () => invoke('local_music_get_dirs'),
+    setDirs: (dirs: string[]) => invoke('local_music_set_dirs', { dirs }),
+    getList: () => invoke('local_music_get_list'),
+    getUrl: (id: string | number) => invoke('local_music_get_url', { id: String(id) }),
+    getUrlById: (id: string | number) => invoke('local_music_get_url', { id: String(id) }),
+    clearIndex: () => invoke('local_music_clear_index'),
+    getCoverBase64: (songmid: string) => invoke('local_music_get_cover', { songmid }),
+    getCoversBase64: (trackIds: string[]) => invoke('local_music_get_covers', { trackIds }),
+    getTags: (songmid: string, includeLyrics = false) =>
+      invoke('local_music_get_tags', { songmid, includeLyrics }),
+    getLyric: (songmid: string) => invoke('local_music_get_lyric', { songmid }),
     onScanProgress: (callback: (processed: number, total: number) => void) => {
-      const unlisten = listen('scan-progress', (event: any) =>
-        callback(event.payload.scanned, event.payload.total)
+      const unlisten = listen('local-music:scan-progress', (event: any) =>
+        callback(event.payload.processed, event.payload.total)
       )
       return () => {
         unlisten.then((f) => f())
       }
     },
     onScanFinished: (callback: (resList: any[]) => void) => {
-      const unlisten = listen('scan-completed', () => callback([]))
+      const unlisten = listen('local-music:scan-finished', (event: any) =>
+        callback(Array.isArray(event.payload) ? event.payload : [])
+      )
       return () => {
         unlisten.then((f) => f())
       }
     },
     removeScanProgress: () => {},
     removeScanFinished: () => {},
-    batchMatch: async () => ({}),
+    batchMatch: async () => ({
+      success: false,
+      code: 'UNSUPPORTED_TAURI_PHASE_1',
+      message: '批量识别匹配暂未迁移到 Tauri'
+    }),
     onBatchMatchProgress: () => () => {},
     onBatchMatchFinished: () => () => {},
     removeBatchMatchListeners: () => {}
@@ -493,6 +505,7 @@ const api = {
     onToggleLike: () => () => {}
   },
   app: {
+    getVersion: () => invoke('get_app_version'),
     setTitle: () => {},
     setProgress: () => {}
   },
@@ -608,14 +621,3 @@ const api = {
 // Assign to global window object
 // @ts-ignore
 window.api = api
-// @ts-ignore
-window.electron = {
-  ipcRenderer: {
-    send: () => {},
-    invoke: () => {},
-    on: () => {},
-    once: () => {},
-    removeListener: () => {},
-    removeAllListeners: () => {}
-  }
-}

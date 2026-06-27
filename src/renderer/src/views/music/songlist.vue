@@ -38,7 +38,6 @@ import {
   handleSyncToCloudHelper
 } from '@renderer/utils/playlist/cloudSyncHelper'
 import SharePlaylistDialog from '@renderer/components/Share/SharePlaylistDialog.vue'
-import { useAuthStore } from '@renderer/store'
 
 const settingsStore = useSettingsStore()
 
@@ -179,23 +178,11 @@ const importSonglistFromFile = async () => {
 // 加载歌单列表
 const loadPlaylists = async () => {
   loading.value = true
-  const authStore = useAuthStore()
-  console.log('authStore.isAuthenticated', authStore.isAuthenticated)
   try {
-    async function getCloudSongList() {
-      if (!authStore.isAuthenticated) {
-        console.log('未登录跳过云歌单')
-        return []
-      }
-      return await cloudSongListAPI.getUserSongLists().catch((err) => {
-        MessagePlugin.error(err.message || '获取云歌单失败')
-        return []
-      })
-    }
-    const [localRes, cloudRes] = await Promise.all([songListAPI.getAll(), getCloudSongList()])
+    const localRes = await songListAPI.getAll()
 
     const localLists = (localRes.success ? localRes.data : []) || []
-    const cloudLists: CloudSongList[] = Array.isArray(cloudRes) ? cloudRes : []
+    const cloudLists: CloudSongList[] = []
 
     console.log('Local Lists:', localLists)
     console.log('Cloud Lists:', cloudLists)

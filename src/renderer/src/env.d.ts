@@ -41,3 +41,6 @@ interface ImportMeta {
   readonly env: ImportMetaEnv
 }
 
+interface Window {
+  api: any
+}

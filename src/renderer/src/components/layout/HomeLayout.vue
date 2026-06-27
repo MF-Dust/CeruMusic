@@ -18,7 +18,7 @@ onMounted(() => {
   // Listen for global hotkey to open audio output selector
   // Note: Logic moved to App.vue to support global toggle and prevent duplicate listeners.
   // This listener is removed to avoid conflict.
-  // window.electron.ipcRenderer.on('hotkeys:toggle-audio-output-selector', () => {
+  // Native hotkeys can toggle the audio output selector after Tauri support lands.
   //   router.push({
   //     path: '/settings',
   //     query: { category: 'playlist', section: 'audio-output', t: Date.now() }
@@ -212,7 +212,7 @@ const handleKeyDown = () => {
 }
 
 // 处理搜索建议选择
-const handleSuggestionSelect = (suggestion: any, _type: any) => {
+const handleSuggestionSelect = (suggestion: any) => {
   SearchStore.setValue(suggestion)
   handleSearch()
 }
@@ -222,7 +222,7 @@ const steps = ref<GuideStep[]>([
   {
     element: '.home-container',
     title: '欢迎使用 Ceru Music',
-    body: '这是一个基于 Electron 框架的开源音乐播放器应用。你可以自由选择合规插件进行播放歌曲，亦或是使用内置的本地播放器进行播放。下面即将开始新手教程请确认是否开始。',
+    body: '这是一个基于 Tauri 框架的开源音乐播放器应用。你可以自由选择合规插件进行播放歌曲，亦或是使用内置的本地播放器进行播放。下面即将开始新手教程请确认是否开始。',
     mode: 'dialog'
   },
   {
@@ -234,7 +234,7 @@ const steps = ref<GuideStep[]>([
   {
     element: '.header',
     title: '顶部栏',
-    body: '顶部栏包含了应用的一些高频操作按钮，如返回、前进、全局在线搜索、账号等。你可以在顶部栏上点击这些按钮，执行对应的操作。'
+    body: '顶部栏包含了应用的一些高频操作按钮，如返回、前进、全局在线搜索等。你可以在顶部栏上点击这些按钮，执行对应的操作。'
   },
   {
     element: '.source-selector',
@@ -432,7 +432,7 @@ function checkGuide() {
                 </t-button>
               </t-tooltip>
 
-              <TitleBarControls :show-account="true"></TitleBarControls>
+              <TitleBarControls></TitleBarControls>
             </div>
           </div>
 

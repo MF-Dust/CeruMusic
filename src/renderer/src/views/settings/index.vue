@@ -4,7 +4,6 @@ import { useRoute } from 'vue-router'
 import TitleBarControls from '@renderer/components/TitleBarControls.vue'
 import {
   PaletteIcon,
-  ApiIcon,
   PlayCircleIcon,
   KeyboardIcon,
   TreeRoundDotIcon,
@@ -15,7 +14,6 @@ import {
 
 // Import Section Components
 import AppearanceSection from './sections/AppearanceSection.vue'
-import AISection from './sections/AISection.vue'
 import PlaybackSection from './sections/PlaybackSection.vue'
 import HotkeySection from './sections/HotkeySection.vue'
 import PluginSection from './sections/PluginSection.vue'
@@ -38,12 +36,6 @@ const settingsCategories = [
     label: '外观设置',
     icon: PaletteIcon,
     description: '主题、标题栏风格等外观配置'
-  },
-  {
-    key: 'ai',
-    label: 'AI 功能',
-    icon: ApiIcon,
-    description: 'DeepSeek API 配置和 AI 相关功能'
   },
   {
     key: 'playlist',
@@ -85,7 +77,6 @@ const settingsCategories = [
 
 const sectionComponents: Record<string, any> = {
   appearance: AppearanceSection,
-  ai: AISection,
   playlist: PlaybackSection,
   hotkeys: HotkeySection,
   plugins: PluginSection,
@@ -94,7 +85,7 @@ const sectionComponents: Record<string, any> = {
   about: AboutSection
 }
 
-const currentComponent = computed(() => sectionComponents[activeCategory.value])
+const currentComponent = computed(() => sectionComponents[activeCategory.value] || AppearanceSection)
 
 // 切换设置分类
 const switchCategory = async (categoryKey: string) => {
@@ -200,7 +191,7 @@ const handleSearchSelect = async (item: SearchItem) => {
   <div class="main-container">
     <!-- 标题栏 -->
     <div class="header">
-      <TitleBarControls title="设置" :show-back="true" :show-account="false">
+      <TitleBarControls title="设置" :show-back="true">
         <template #extra>
           <div style="flex-shrink: 0">
             <SettingsSearch @select="handleSearchSelect" />

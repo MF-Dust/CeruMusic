@@ -21,12 +21,12 @@ const { checkForUpdates } = useAutoUpdate()
 
 const getAppVersion = async () => {
   try {
-    const version = await window.electron.ipcRenderer.invoke('get-app-version')
+    const version = await window.api?.app?.getVersion?.()
     if (version) {
       appVersion.value = version
     }
   } catch (error) {
-    console.warn('Failed to get app version via IPC:', error)
+    console.warn('Failed to get app version:', error)
   }
 }
 
@@ -92,7 +92,7 @@ const openLink = (url: string) => {
       <h3>技术栈&服务&友商</h3>
       <div class="tech-stack">
         <div class="tech-item">
-          <span class="tech-name">Electron</span>
+          <span class="tech-name">Tauri</span>
           <span class="tech-desc">跨平台桌面应用框架</span>
         </div>
         <div class="tech-item">
@@ -219,7 +219,7 @@ const openLink = (url: string) => {
             一枚普普通通的高中生，因为好奇+喜欢，悄悄自学了一点编程✨！
             <br />
             <br />
-            没想到今天你能用上我做的软件——「澜音」，它其实是我学 Electron 时孵出来的小demo！
+            没想到今天你能用上我做的软件——「澜音」，它其实是我学习桌面应用开发时孵出来的小demo！
             <br />
             看到它真的能运行、还有人愿意用，我真的超级开心＋骄傲的！💖
             <br />

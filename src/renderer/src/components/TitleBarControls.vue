@@ -9,7 +9,6 @@ const props = withDefaults(defineProps<Props>(), {
   controlStyle: false,
   showSettings: true,
   showBack: false,
-  showAccount: false,
   title: '',
   color: ''
 })
@@ -26,7 +25,6 @@ interface Props {
   controlStyle?: ControlStyle | boolean
   showSettings?: boolean
   showBack?: boolean
-  showAccount?: boolean
   title?: string
   color?: string
 }
@@ -157,11 +155,6 @@ onBeforeUnmount(() => {
 
     <div class="window-controls">
       <slot name="extra" />
-      <!-- 账号模块 -->
-      <div v-if="showAccount" class="account-module">
-        <UserCapsule :color="color" />
-      </div>
-
       <!-- 设置按钮 -->
       <t-button
         v-if="showSettings"
@@ -356,11 +349,6 @@ onBeforeUnmount(() => {
     align-items: center;
     gap: 0.125rem;
     flex-shrink: 0;
-  }
-
-  .account-module {
-    -webkit-app-region: no-drag;
-    margin-right: 0.25rem;
   }
 
   .mini-btn {
