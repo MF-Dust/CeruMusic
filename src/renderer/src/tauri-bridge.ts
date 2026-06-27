@@ -752,8 +752,6 @@ async function runBuiltinMusicSdk(apiName: string, args: any = {}) {
         return await Api.comment.getHotComment(args.songInfo, args.page || 1, args.limit || 100)
       case 'getComment':
         return await Api.comment.getComment(args.songInfo, args.page || 1, args.limit || 20)
-      case 'recognize':
-        return Api.recognize ? await Api.recognize.recognize(args.fp, args.duration) : []
       case 'getAlbumList':
         return Api.singer
           ? await Api.singer.getAlbumList(args.songInfo.albumId, args.page || 1, args.limit || 10)
@@ -775,6 +773,64 @@ function subscribe(event: string, handler: (payload: any) => void) {
   return () => {
     unlisten.then((f) => f())
   }
+}
+
+const batchMatchProgressListeners = new Set<(processed: number, total: number) => void>()
+const batchMatchFinishedListeners = new Set<(res: any) => void>()
+
+const parseIntervalToSec = (interval: any) => {
+  if (typeof interval === 'number') return interval
+  if (!interval || typeof interval !== 'string') return 0
+  const parts = interval.split(':').map((n) => Number(n))
+  if (parts.some((n) => Number.isNaN(n))) return 0
+  if (parts.length === 2) return parts[0] * 60 + parts[1]
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2]
+  return 0
+}
+
+const strSim = (a: string, b: string) => {
+  const x = String(a || '').toLowerCase().replace(/\s+/g, '')
+  const y = String(b || '').toLowerCase().replace(/\s+/g, '')
+  if (!x || !y) return 0
+  if (x === y) return 1
+  if (x.includes(y) || y.includes(x)) return 0.8
+  return 0
+}
+
+const rankLocalMatchCandidate = (song: any, candidate: any) => {
+  const nameScore = strSim(candidate?.name || '', (song?.name || '').trim())
+  const artistScore = strSim((candidate?.singer || '').trim(), (song?.singer || '').trim())
+  const targetSec = parseIntervalToSec(song?.interval)
+  const candidateSec = Number(candidate?.interval || 0)
+  let durationScore = 0
+  if (targetSec > 0 && candidateSec > 0) {
+    const diff = Math.abs(candidateSec - targetSec)
+    durationScore = diff <= 2 ? 1 : diff <= 5 ? 0.6 : diff <= 10 ? 0.3 : 0
+  }
+  return nameScore * 0.6 + durationScore * 0.3 + artistScore * 0.1
+}
+
+const pickBestLocalMatch = async (song: any) => {
+  const sourcesOrder = ['wy', 'tx', 'kg', 'kw', 'mg']
+  const keyword = `${song?.name || ''} ${song?.singer || ''}`.trim() || song?.name || ''
+  const all: any[] = []
+  for (const source of sourcesOrder) {
+    try {
+      const res: any = await api.music.requestSdk('search', {
+        source,
+        keywords: keyword,
+        keyword,
+        page: 1,
+        limit: 5,
+      })
+      const list = Array.isArray(res?.list) ? res.list : Array.isArray(res) ? res : []
+      for (const item of list) {
+        all.push({ ...item, source, _score: rankLocalMatchCandidate(song, item) })
+      }
+    } catch {}
+  }
+  all.sort((a, b) => (b._score || 0) - (a._score || 0))
+  return all[0] || null
 }
 
 const api = {
@@ -1030,9 +1086,18 @@ const api = {
     set: async () => true,
   },
   autoUpdater: {
-    checkForUpdates: async () => {},
-    downloadUpdate: async () => {},
-    quitAndInstall: async () => {},
+    checkForUpdates: async () => ({
+      disabled: true,
+      message: 'Tauri 版本暂未启用自动更新',
+    }),
+    downloadUpdate: async () => ({
+      disabled: true,
+      message: 'Tauri 版本暂未启用自动更新',
+    }),
+    quitAndInstall: async () => ({
+      disabled: true,
+      message: 'Tauri 版本暂未启用自动更新',
+    }),
     getDownloadedPath: async () => '',
     onCheckingForUpdate: () => {},
     onUpdateAvailable: () => {},
@@ -1121,26 +1186,102 @@ const api = {
     },
     removeScanProgress: () => {},
     removeScanFinished: () => {},
-    batchMatch: async () => ({
-      success: false,
-      code: 'UNSUPPORTED_TAURI_PHASE_1',
-      message: '批量识别匹配暂未迁移到 Tauri',
-    }),
-    onBatchMatchProgress: () => () => {},
-    onBatchMatchFinished: () => () => {},
-    removeBatchMatchListeners: () => {},
+    batchMatch: async (ids: Array<string | number> = []) => {
+      const list: any = await invoke('local_music_get_list')
+      const idSet = new Set((ids || []).map((id) => String(id)))
+      const targets = Array.isArray(list)
+        ? list.filter((song: any) => !idSet.size || idSet.has(String(song.songmid)))
+        : []
+      let matched = 0
+      const total = targets.length
+      const settings = await api.getUserConfig().catch(() => ({}))
+      const tagWriteOptions = settings?.tagWriteOptions || {
+        basicInfo: true,
+        cover: true,
+        lyrics: false,
+        downloadLyrics: false,
+        lyricFormat: 'lrc',
+      }
+
+      for (let index = 0; index < targets.length; index++) {
+        const song = targets[index]
+        try {
+          const best = await pickBestLocalMatch(song)
+          if (best && best._score >= 0.55 && song?.path) {
+            let pic = best.img || ''
+            if (!pic) {
+              const p = await api.music.requestSdk('getPic', {
+                source: best.source,
+                songInfo: best,
+              })
+              if (typeof p !== 'object') pic = p as string
+            }
+            const writeRes: any = await api.localMusic.writeTags(
+              song.path,
+              {
+                name: best.name,
+                singer: best.singer,
+                albumName: best.albumName,
+                lrc: null,
+                img: pic,
+              },
+              tagWriteOptions,
+            )
+            if (writeRes?.success !== false) matched++
+          }
+        } catch (error) {
+          console.warn('[localMusic.batchMatch] item failed:', error)
+        } finally {
+          const processed = index + 1
+          for (const cb of batchMatchProgressListeners) cb(processed, total)
+        }
+      }
+
+      const result = { success: true, matched, total }
+      for (const cb of batchMatchFinishedListeners) cb(result)
+      return result
+    },
+    onBatchMatchProgress: (callback: (processed: number, total: number) => void) => {
+      batchMatchProgressListeners.add(callback)
+      return () => batchMatchProgressListeners.delete(callback)
+    },
+    onBatchMatchFinished: (callback: (res: any) => void) => {
+      batchMatchFinishedListeners.add(callback)
+      return () => batchMatchFinishedListeners.delete(callback)
+    },
+    removeBatchMatchListeners: () => {
+      batchMatchProgressListeners.clear()
+      batchMatchFinishedListeners.clear()
+    },
   },
   pluginNotice: {
     onPluginNotice: (callback: (data: any) => void) => subscribe('plugin-notice', (p) => callback(p)),
     onPluginThrottle: (callback: (data: any) => void) => subscribe('plugin-throttle', (p) => callback(p)),
     onPluginDisabled: (callback: (data: any) => void) => subscribe('plugin-disabled', (p) => callback(p)),
   },
-  systemAudio: {
-    prepareCapture: async () => '',
-    getDefaultScreenSourceId: async () => '',
-  },
   share: {
-    getPluginCodeAndMd5: async () => ({ error: 'Not supported' }),
+    getPluginCodeAndMd5: async (pluginId: string) => {
+      if (!pluginId) return { error: '缺少插件 ID' }
+      await ensurePluginRuntime(pluginId)
+      let code = loadedPluginCodes[pluginId]
+      let metadata = loadedPluginMetadata[pluginId]
+      if (!code) {
+        const raw = await api.plugins.getPluginById(pluginId)
+        code = raw?.code || ''
+        metadata = raw?.metadata || metadata || {}
+      }
+      if (!code) return { error: '插件不存在或没有可分享的代码' }
+      const importType = metadata?.importType === 'lx' ? 'lx' : 'cr'
+      const looksLikeLx =
+        importType === 'lx' ||
+        /\blx\.(on|request|utils|send|version)\b/.test(code) ||
+        /\bmodule\.exports\s*=/.test(code)
+      return {
+        code,
+        md5: CryptoJS.MD5(code).toString(),
+        type: looksLikeLx ? 'lx' : 'cr',
+      }
+    },
     onShareOpen: (callback: (payload: { id: string }) => void) => subscribe('share-open', (p) => callback(p)),
     onPlaylistShareOpen: (callback: (payload: { id: string }) => void) =>
       subscribe('playlist-share-open', (p) => callback(p)),
@@ -1169,9 +1310,11 @@ const api = {
   app: {
     getVersion: () => invoke('get_app_version'),
     setTitle: (title: string) => invoke('window_set_title', { title }),
-    setProgress: () => {},
+    setProgress: (progress: number, options?: { paused?: boolean }) =>
+      invoke('window_set_progress', { progress, paused: !!options?.paused }),
   },
   desktopLyric: {
+    changeDesktopLyric: (val: boolean) => invoke('change_desktop_lyric', { val }),
     getOption: () => invoke('get_desktop_lyric_option'),
     setOption: (option: any, callback = false) => invoke('set_desktop_lyric_option', { option, callback }),
     getLockState: () => invoke('get_lyric_lock_state'),
@@ -1184,6 +1327,11 @@ const api = {
     close: () => invoke('lyric_window_close'),
     ready: () => invoke('lyric_window_ready'),
     sendToMain: (name: string, ...args: any[]) => invoke('lyric_window_send_to_main', { name, args }),
+    onOpenChange: (callback: (open: boolean) => void) =>
+      subscribe('desktop-lyric-open-change', (p) => callback(!!p)),
+    onLockChange: (callback: (locked: boolean) => void) =>
+      subscribe('toogleDesktopLyricLock', (p) => callback(!!p)),
+    onClose: (callback: () => void) => subscribe('closeDesktopLyric', () => callback()),
   },
   music: {
     requestSdk: async (apiName: string, args: any) => {
@@ -1398,22 +1546,6 @@ const api = {
   },
   registry: {
     cleanAUMID: async () => {},
-  },
-  dlna: {
-    startScan: () => {},
-    stopScan: () => {},
-    getDevices: async () => [],
-    setDevice: async () => {},
-    play: async () => {},
-    pause: async () => {},
-    stop: async () => {},
-    seek: async () => {},
-    setVolume: async () => {},
-    getPosition: async () => 0,
-    getVolume: async () => 100,
-    onDeviceFound: () => () => {},
-    onPlayStateChanged: () => () => {},
-    onPositionChanged: () => () => {},
   },
 }
 

@@ -29,12 +29,11 @@ const route = useRoute()
 const router = useRouter()
 const settingsStore = useSettingsStore()
 // 启动页路由是 '/'(welcome)；其它路由（/home/*, /settings 等）视为应用就绪
-// 排除桌面歌词与识别 worker 这种独立窗口
+// 排除桌面歌词独立窗口
 const isAppReady = computed(() => {
   const p = route.path || ''
   if (p === '/' || p === '') return false
   if (p.startsWith('/desktop-lyric')) return false
-  if (p.startsWith('/recognition-worker')) return false
   return true
 })
 

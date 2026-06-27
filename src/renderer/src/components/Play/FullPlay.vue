@@ -18,8 +18,6 @@ import { storeToRefs } from 'pinia'
 import { debounce } from '@renderer/utils/helpers'
 import { useSettingsStore } from '@renderer/store/Settings'
 import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'
-import { useDlnaStore } from '@renderer/store/dlna'
-import { MessagePlugin } from 'tdesign-vue-next'
 
 // 全局播放模式设置
 import { usePlaySettingStore } from '@renderer/store'
@@ -33,7 +31,6 @@ import { useLyricExtrasStore } from '@renderer/store/LyricExtras'
 
 const playSetting = usePlaySettingStore()
 const settingsStore = useSettingsStore()
-const dlnaStore = useDlnaStore()
 const globalPlayStatus = useGlobalPlayStatusStore()
 const { player } = storeToRefs(globalPlayStatus)
 const lyricExtrasStore = useLyricExtrasStore()
@@ -476,10 +473,6 @@ const actualCoverImage = computed(() => {
 })
 
 const jumpTime = (e) => {
-  if (dlnaStore.currentDevice) {
-    MessagePlugin.warning('投屏模式下不支持拖拽进度')
-    return
-  }
   if (Audio.value.audio) Audio.value.audio.currentTime = e.line.getLine().startTime / 1000
 }
 // 背景渲染懒加载状态：仅在首次进入全屏时初始化 PIXI，避免在最小化播放栏期间空跑

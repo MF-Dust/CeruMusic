@@ -38,11 +38,6 @@ const appRouter: RouteRecordRaw[] = [
         component: () => import('@renderer/views/music/search.vue')
       },
       {
-        path: 'recognize',
-        name: 'recognize',
-        component: () => import('@renderer/views/music/recognize.vue')
-      },
-      {
         path: 'list/:id',
         name: 'list',
         component: () => import('@renderer/views/music/list.vue')
@@ -78,11 +73,6 @@ const routes: RouteRecordRaw[] = [
     path: '/desktop-lyric',
     name: 'desktop-lyric',
     component: () => import('@renderer/views/DeskTopLyric/DeskTopLyric.vue')
-  },
-  {
-    path: '/recognition-worker',
-    name: 'recognition-worker',
-    component: () => import('@renderer/views/music/RecognitionWorker.vue')
   }
 ]
 
@@ -164,12 +154,10 @@ const startPreload = () => {
     '/home/search',
     '/home/download',
     '/home/recent',
-    '/home/recognize',
     '/home/list/:id',
     '/home/local/edit-tag',
     '/settings',
-    '/desktop-lyric',
-    '/recognition-worker'
+    '/desktop-lyric'
   ]
   const flat = flattenRoutes(routes).filter(
     (route) => route.component && typeof route.component === 'function'

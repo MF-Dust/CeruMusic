@@ -39,12 +39,6 @@
         "visible": false,
         "skipTaskbar": true,
         "url": "/#/desktop-lyric"
-      },
-      {
-        "label": "recognition-worker",
-        "title": "Recognition Worker",
-        "visible": false,
-        "url": "/#/recognition-worker"
       }
     ],
     "security": {

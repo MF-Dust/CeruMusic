@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import TitleBarControls from '@renderer/components/TitleBarControls.vue'
 import SearchSuggest from '@renderer/components/search/searchSuggest.vue'
-import { SearchIcon, MicrophoneIcon } from 'tdesign-icons-vue-next'
+import { SearchIcon } from 'tdesign-icons-vue-next'
 import { onMounted, onUnmounted, ref, watchEffect, computed, watch } from 'vue'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useRouter, useRoute } from 'vue-router'
@@ -417,21 +417,6 @@ function checkGuide() {
                 </t-input>
                 <SearchSuggest @to-search="handleSuggestionSelect" />
               </div>
-              <t-tooltip content="听歌识曲（Beta）" placement="bottom">
-                <t-button
-                  shape="circle"
-                  theme="default"
-                  variant="text"
-                  class="nav-btn"
-                  style="width: 32px; height: 32px; margin: 0; flex-shrink: 0"
-                  @click="router.push('/home/recognize')"
-                >
-                  <template #icon>
-                    <MicrophoneIcon />
-                  </template>
-                </t-button>
-              </t-tooltip>
-
               <TitleBarControls></TitleBarControls>
             </div>
           </div>

@@ -12,7 +12,6 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     AudioEffectSettings: typeof import('./src/components/Settings/AudioEffectSettings.vue')['default']
-    AudioMatch: typeof import('./src/components/Play/AudioMatch.vue')['default']
     AudioOutputSettings: typeof import('./src/components/Settings/AudioOutputSettings.vue')['default']
     AudioVisualizer: typeof import('./src/components/Play/AudioVisualizer.vue')['default']
     BaseDialog: typeof import('./src/components/BaseDialog.vue')['default']

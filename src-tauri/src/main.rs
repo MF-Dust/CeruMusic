@@ -18,6 +18,7 @@ use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{TrayIconBuilder, TrayIconEvent, MouseButton, MouseButtonState};
+use tauri::window::{ProgressBarState, ProgressBarStatus};
 use config::ConfigManager;
 use db::DatabaseManager;
 use download::DownloadManager;
@@ -251,6 +252,32 @@ fn window_set_title(title: String, app: AppHandle) {
     if let Some(win) = app.get_webview_window("main") {
         let _ = win.set_title(&title);
     }
+}
+
+#[tauri::command]
+fn window_set_progress(progress: f64, paused: Option<bool>, app: AppHandle) -> Result<(), String> {
+    if let Some(win) = app.get_webview_window("main") {
+        if progress < 0.0 {
+            win.set_progress_bar(ProgressBarState {
+                status: Some(ProgressBarStatus::None),
+                progress: None,
+            })
+            .map_err(|e| e.to_string())?;
+            return Ok(());
+        }
+
+        let value = (progress.clamp(0.0, 1.0) * 100.0).round() as u64;
+        win.set_progress_bar(ProgressBarState {
+            status: Some(if paused.unwrap_or(false) {
+                ProgressBarStatus::Paused
+            } else {
+                ProgressBarStatus::Normal
+            }),
+            progress: Some(value),
+        })
+        .map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -564,6 +591,7 @@ fn main() {
             window_show,
             get_app_version,
             window_set_title,
+            window_set_progress,
             window_set_mini_mode,
             open_folder,
             get_folder_size,

@@ -59,7 +59,7 @@ export const useSettingsStore = defineStore(
         downloadLyrics: false,
         lyricFormat: 'word-by-word'
       },
-      autoUpdate: true,
+      autoUpdate: false,
       autoImportPlaylistOnOpen: false,
       suppressImportPrompt: false,
       lyricFontFamily: 'PingFangSC-Semibold',

@@ -11,7 +11,6 @@ const tx = {
     getList: () => Promise.resolve({ list: [], total: 0 })
   },
   comment: { getComments: () => Promise.resolve([]) },
-  recognize: { search: () => Promise.resolve([]) },
   singer: { getSongs: () => Promise.resolve([]) },
   getLyric: () => Promise.resolve(''),
   getPic: () => Promise.resolve(''),

@@ -49,7 +49,6 @@ import {
   RefreshIcon
 } from 'tdesign-icons-vue-next'
 import { songListAPI } from '@renderer/api/songList'
-import { useDlnaStore } from '@renderer/store/dlna'
 import { crossfadeState, crossfadeManager } from '@renderer/utils/audio/crossfade'
 import CrossfadeHint from './CrossfadeHint.vue'
 import ShareSongDialog from '@renderer/components/Share/ShareSongDialog.vue'
@@ -59,7 +58,6 @@ import { useLyricExtrasStore } from '@renderer/store/LyricExtras'
 import { getSongRealUrl } from '@renderer/utils/playlist/playlistManager'
 import { waitForAudioReady } from '@renderer/utils/audio/audioHelpers'
 
-const dlnaStore = useDlnaStore()
 const controlAudio = ControlAudioStore()
 const localUserStore = LocalUserDetailStore()
 const globalPlayStatus = useGlobalPlayStatusStore()
@@ -70,97 +68,6 @@ const { player } = storeToRefs(globalPlayStatus)
 const songInfo = computed(() => player.value.songInfo || ({} as any))
 
 const {} = controlAudio
-
-watch(
-  () => dlnaStore.currentDevice,
-  (device) => {
-    if (Audio.value.audio) {
-      Audio.value.audio.muted = !!device
-    }
-  },
-  { immediate: true }
-)
-
-let dlnaSyncInterval: any = null
-
-watch(
-  () => dlnaStore.currentDevice,
-  (device) => {
-    if (device) {
-      if (!dlnaSyncInterval) {
-        dlnaSyncInterval = setInterval(async () => {
-          if (Audio.value.isPlay) {
-            const position = await dlnaStore.getPosition()
-            if (position && typeof position === 'number') {
-              // Only sync if the difference is more than 2 seconds to avoid jitter
-              if (Math.abs(Audio.value.currentTime - position) > 2) {
-                if (Audio.value.audio) {
-                  Audio.value.audio.currentTime = position
-                }
-              }
-            }
-          }
-        }, 1000)
-      }
-    } else {
-      if (dlnaSyncInterval) {
-        clearInterval(dlnaSyncInterval)
-        dlnaSyncInterval = null
-      }
-    }
-  }
-)
-
-watch(
-  () => Audio.value.audio,
-  (newAudio) => {
-    if (newAudio && dlnaStore.currentDevice) {
-      newAudio.muted = true
-    }
-  }
-)
-
-watch(
-  () => Audio.value.url,
-  (newUrl) => {
-    if (dlnaStore.currentDevice && newUrl) {
-      if (Audio.value.audio) {
-        Audio.value.audio.pause() // Pause locally while TV loads
-      }
-      dlnaStore.play(newUrl, songInfo.value.name || 'CeruMusic').then(() => {
-        // After loading on TV, sync and play
-        setTimeout(async () => {
-          if (Audio.value.audio) {
-            const pos = await dlnaStore.getPosition()
-            if (pos && typeof pos === 'number') {
-              Audio.value.audio.currentTime = pos
-            }
-            Audio.value.audio.play().catch(() => {})
-          }
-        }, 1500)
-      })
-    }
-  }
-)
-
-watch(
-  () => Audio.value.isPlay,
-  (isPlay) => {
-    if (dlnaStore.currentDevice) {
-      if (isPlay) dlnaStore.resume()
-      else dlnaStore.pause()
-    }
-  }
-)
-
-watch(
-  () => Audio.value.volume,
-  (newVol) => {
-    if (dlnaStore.currentDevice) {
-      dlnaStore.setVolume(newVol)
-    }
-  }
-)
 
 // 当前歌曲是否已在“我的喜欢”
 const likeState = ref(false)
@@ -319,10 +226,46 @@ const toggleComments = () => {
 
 const desktopLyricOpen = ref(false)
 const desktopLyricLocked = ref(false)
-const desktopLyricSupported = false
+const desktopLyricSupported = true
 
-const toggleDesktopLyric = () => {
-  console.warn('Desktop lyric window is not available in the Tauri runtime yet')
+const refreshDesktopLyricState = async () => {
+  const desktopLyric = (window as any).api?.desktopLyric
+  if (!desktopLyric) return
+  try {
+    const [open, locked] = await Promise.all([
+      desktopLyric.getOpenState?.(),
+      desktopLyric.getLockState?.()
+    ])
+    desktopLyricOpen.value = !!open
+    desktopLyricLocked.value = !!locked
+  } catch (error) {
+    console.warn('[desktop lyric] failed to read state:', error)
+  }
+}
+
+const toggleDesktopLyric = async () => {
+  const desktopLyric = (window as any).api?.desktopLyric
+  if (!desktopLyric) return
+  try {
+    if (!desktopLyricOpen.value) {
+      await desktopLyric.setOption?.({ isOpen: true }, true)
+      await desktopLyric.changeDesktopLyric?.(true)
+      desktopLyricOpen.value = true
+      return
+    }
+
+    if (!desktopLyricLocked.value) {
+      await desktopLyric.close?.()
+      desktopLyricOpen.value = false
+      return
+    }
+
+    await desktopLyric.setLock?.(false)
+    desktopLyricLocked.value = false
+  } catch (error) {
+    console.warn('[desktop lyric] toggle failed:', error)
+    MessagePlugin.warning('桌面歌词操作失败')
+  }
 }
 // 等待音频准备就绪
 // 播放位置恢复逻辑由全局播放管理器处理
@@ -445,6 +388,9 @@ let openPlaylistHandler: (() => void) | null = null
 let closePlaylistHandler: (() => void) | null = null
 let unsubSlotSwap: (() => void) | null = null
 let unsubCanPlay: (() => void) | null = null
+let unsubDesktopLyricOpen: (() => void) | null = null
+let unsubDesktopLyricLock: (() => void) | null = null
+let unsubDesktopLyricClose: (() => void) | null = null
 
 function globalControls(e) {
   console.log('全局:', e)
@@ -480,6 +426,17 @@ onMounted(() => {
   }
   // 首次推送状态
   pushThumbarState()
+  refreshDesktopLyricState()
+  const desktopLyric = (window as any).api?.desktopLyric
+  unsubDesktopLyricOpen = desktopLyric?.onOpenChange?.((open: boolean) => {
+    desktopLyricOpen.value = open
+  })
+  unsubDesktopLyricLock = desktopLyric?.onLockChange?.((locked: boolean) => {
+    desktopLyricLocked.value = locked
+  })
+  unsubDesktopLyricClose = desktopLyric?.onClose?.(() => {
+    desktopLyricOpen.value = false
+  })
 })
 
 // 组件卸载时清理
@@ -495,6 +452,12 @@ onUnmounted(() => {
     unsubCanPlay()
     unsubCanPlay = null
   }
+  unsubDesktopLyricOpen?.()
+  unsubDesktopLyricOpen = null
+  unsubDesktopLyricLock?.()
+  unsubDesktopLyricLock = null
+  unsubDesktopLyricClose?.()
+  unsubDesktopLyricClose = null
   openPlaylistHandler = null
   closePlaylistHandler = null
 
@@ -799,11 +762,6 @@ const switchQuality = async (quality: string) => {
   if (switchingQuality.value) return
   if (!quality || quality === currentQuality.value) return
   if (!canSwitchQuality.value) return
-
-  if (dlnaStore.currentDevice) {
-    MessagePlugin.warning('投屏模式下暂不支持切换音质')
-    return
-  }
 
   const src = (songInfo.value as any).source
   const currentSong = list.value.find((s) => s.songmid === userInfo.value.lastPlaySongId)
@@ -1191,11 +1149,7 @@ const progressPercentage = computed(() => {
 
 // 无感过渡预告区间在进度条上的百分比位置
 const crossfadeMarkVisible = computed(() => {
-  return (
-    crossfadeState.markEnd > crossfadeState.markStart &&
-    Audio.value.duration > 0 &&
-    !dlnaStore.currentDevice
-  )
+  return crossfadeState.markEnd > crossfadeState.markStart && Audio.value.duration > 0
 })
 const crossfadeMarkLeft = computed(() => {
   if (!crossfadeMarkVisible.value) return 0
@@ -1221,7 +1175,7 @@ const crossfadeActiveMarkWidth = computed(() => {
 
 // 过渡完成后，新歌开头的淡入区段标记（从 0 到 fadeInMarkEnd 秒）
 const crossfadeFadeInMarkVisible = computed(() => {
-  return crossfadeState.fadeInMarkEnd > 0 && Audio.value.duration > 0 && !dlnaStore.currentDevice
+  return crossfadeState.fadeInMarkEnd > 0 && Audio.value.duration > 0
 })
 const crossfadeFadeInMarkWidth = computed(() => {
   if (!crossfadeFadeInMarkVisible.value) return 0
@@ -1291,10 +1245,6 @@ const handleProgressMouseLeave = () => {
 
 // 进度条拖动处理
 const handleProgressClick = (event: MouseEvent) => {
-  if (dlnaStore.currentDevice) {
-    MessagePlugin.warning('投屏模式下不支持拖拽进度')
-    return
-  }
   if (!progressRef.value) return
 
   const rect = progressRef.value.getBoundingClientRect()
@@ -1305,29 +1255,8 @@ const handleProgressClick = (event: MouseEvent) => {
   tempProgressPercentage.value = percentage
   cursorProgressPercentage.value = percentage
 
-  const wasPlaying = Audio.value.isPlay
   const newTime = (percentage / 100) * Audio.value.duration
-  if (dlnaStore.currentDevice) {
-    // Pause local audio while DLNA seeks/buffers
-    if (Audio.value.audio && !Audio.value.audio.paused) {
-      Audio.value.audio.pause()
-    }
-    dlnaStore.seek(newTime).then(() => {
-      seekTo(newTime)
-      // Wait a bit for DLNA to buffer, then sync and resume
-      setTimeout(async () => {
-        if (wasPlaying && Audio.value.audio) {
-          const position = await dlnaStore.getPosition()
-          if (position && typeof position === 'number') {
-            Audio.value.audio.currentTime = position
-          }
-          Audio.value.audio.play().catch(() => {})
-        }
-      }, 1000)
-    })
-  } else {
-    seekTo(newTime)
-  }
+  seekTo(newTime)
 }
 
 const handleProgressDragMove = (event: MouseEvent) => {
@@ -1354,30 +1283,8 @@ const handleProgressDragEnd = (event: MouseEvent) => {
   const rect = progressRef.value.getBoundingClientRect()
   const offsetX = Math.max(0, Math.min(event.clientX - rect.left, rect.width))
   const percentage = (offsetX / rect.width) * 100
-  const wasPlaying = Audio.value.isPlay
   const newTime = (percentage / 100) * Audio.value.duration
-
-  if (dlnaStore.currentDevice) {
-    // Pause local audio while DLNA seeks/buffers
-    if (Audio.value.audio && !Audio.value.audio.paused) {
-      Audio.value.audio.pause()
-    }
-    dlnaStore.seek(newTime).then(() => {
-      seekTo(newTime)
-      // Wait a bit for DLNA to buffer, then sync and resume
-      setTimeout(async () => {
-        if (wasPlaying && Audio.value.audio) {
-          const position = await dlnaStore.getPosition()
-          if (position && typeof position === 'number') {
-            Audio.value.audio.currentTime = position
-          }
-          Audio.value.audio.play().catch(() => {})
-        }
-      }, 1000)
-    })
-  } else {
-    seekTo(newTime)
-  }
+  seekTo(newTime)
 
   isDraggingProgress.value = false
   window.removeEventListener('mousemove', handleProgressDragMove)
@@ -1385,10 +1292,6 @@ const handleProgressDragEnd = (event: MouseEvent) => {
 }
 
 const handleProgressDragStart = (event: MouseEvent) => {
-  if (dlnaStore.currentDevice) {
-    MessagePlugin.warning('投屏模式下不支持拖拽进度')
-    return
-  }
   event.preventDefault()
   document.querySelector('.progress-handle')?.classList.add('dragging')
 

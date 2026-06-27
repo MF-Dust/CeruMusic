@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import Versions from '@renderer/components/Versions.vue'
-import { useAutoUpdate } from '@renderer/composables/useAutoUpdate'
 import { useSettingsStore } from '@renderer/store/Settings'
 import { storeToRefs } from 'pinia'
 
@@ -16,8 +15,6 @@ const updateAutoUpdate = () => {
 }
 
 const appVersion = ref('1.0.0')
-const isCheckingUpdate = ref(false)
-const { checkForUpdates } = useAutoUpdate()
 
 const getAppVersion = async () => {
   try {
@@ -32,17 +29,6 @@ const getAppVersion = async () => {
 
 // 初始化时获取版本号
 getAppVersion()
-
-const handleCheckUpdate = async () => {
-  isCheckingUpdate.value = true
-  try {
-    await checkForUpdates()
-  } catch (error) {
-    console.error('检查更新失败:', error)
-  } finally {
-    isCheckingUpdate.value = false
-  }
-}
 
 const openLink = (url: string) => {
   window.open(url, '_blank')
@@ -77,11 +63,15 @@ const openLink = (url: string) => {
         <Versions />
         <div class="update-actions">
           <div class="update-option">
-            <t-switch v-model:value="autoUpdate" @change="updateAutoUpdate"></t-switch>
-            <div>应用启动时检查更新</div>
+            <t-switch
+              v-model:value="autoUpdate"
+              disabled
+              @change="updateAutoUpdate"
+            ></t-switch>
+            <div>自动更新暂不可用</div>
           </div>
-          <t-button theme="primary" :loading="isCheckingUpdate" @click="handleCheckUpdate">
-            {{ isCheckingUpdate ? '检查中...' : '检查更新' }}
+          <t-button theme="primary" disabled>
+            检查更新暂不可用
           </t-button>
         </div>
       </div>
