@@ -66,6 +66,7 @@ type PluginType = 'music-source' | 'service'
 const loadedPluginExports: Record<string, any> = {}
 const loadedPluginMetadata: Record<string, any> = {}
 const loadedPluginCodes: Record<string, string> = {}
+const loadedPluginReady: Record<string, Promise<void>> = {}
 
 function safeJson(value: any) {
   try {
@@ -355,7 +356,12 @@ function loadPluginSandbox(
       handlers: {},
       sources: null,
       pluginInfo: null,
+      readyResolve: null,
     }
+    const readyPromise = new Promise<void>((resolve) => {
+      lxState.readyResolve = resolve
+      setTimeout(resolve, 5000)
+    })
 
     const lx = {
       EVENT_NAMES: lxState.EVENT_NAMES,
@@ -366,6 +372,7 @@ function loadPluginSandbox(
         if (eventName === lxState.EVENT_NAMES.inited) {
           lxState.sources = data?.sources || {}
           lxState.pluginInfo = data?.pluginInfo || lxState.pluginInfo
+          lxState.readyResolve?.()
         } else if (eventName === lxState.EVENT_NAMES.updateAlert) {
           cerumusic.NoticeCenter('update', data)
         }
@@ -431,7 +438,15 @@ function loadPluginSandbox(
 
     const keys = Object.keys(sandboxParams)
     const values = Object.values(sandboxParams)
-    const runner = new Function(...keys, `${code}\n;return module.exports;`)
+    const runner = new Function(
+      ...keys,
+      `
+;(function () {
+${code}
+}).call(globalThis);
+return module.exports;
+`,
+    )
     let pluginExports = runner(...values)
 
     if (
@@ -445,6 +460,18 @@ function loadPluginSandbox(
       pluginExports.cerumusic = cerumusic
       loadedPluginExports[pluginId] = pluginExports
       loadedPluginCodes[pluginId] = code
+      if (importType === 'lx' || lxState.handlers[lxState.EVENT_NAMES.request]) {
+        loadedPluginReady[pluginId] = readyPromise.then(() => {
+          loadedPluginMetadata[pluginId] = extractRuntimeMetadata(
+            pluginId,
+            pluginExports,
+            code,
+            rawMetadata,
+          )
+        })
+      } else {
+        loadedPluginReady[pluginId] = Promise.resolve()
+      }
       loadedPluginMetadata[pluginId] = extractRuntimeMetadata(
         pluginId,
         pluginExports,
@@ -498,6 +525,7 @@ async function finalizePluginInstall(raw: any, importType: 'lx' | 'cr') {
     await invoke('plugin_delete', { id: pluginId }).catch(() => {})
     return { error: '插件加载失败，请检查插件语法或格式' }
   }
+  await loadedPluginReady[pluginId]?.catch(() => {})
 
   const validationError = validatePlugin(pluginId)
   if (validationError) {
@@ -505,6 +533,7 @@ async function finalizePluginInstall(raw: any, importType: 'lx' | 'cr') {
     delete loadedPluginExports[pluginId]
     delete loadedPluginMetadata[pluginId]
     delete loadedPluginCodes[pluginId]
+    delete loadedPluginReady[pluginId]
     return { error: validationError }
   }
 
@@ -524,7 +553,9 @@ async function ensurePluginRuntime(pluginId: string) {
   const list: any = await invoke('plugin_load_all')
   const raw = list.find((p: any) => (p.pluginId || p.id) === pluginId)
   if (!raw) return null
-  return loadPluginSandbox(pluginId, raw.code, raw.metadata?.importType || 'cr', raw.metadata || {})
+  const pluginExports = loadPluginSandbox(pluginId, raw.code, raw.metadata?.importType || 'cr', raw.metadata || {})
+  await loadedPluginReady[pluginId]?.catch(() => {})
+  return pluginExports
 }
 
 async function getPluginConfigValue(pluginId: string) {
@@ -1423,6 +1454,7 @@ const api = {
       delete loadedPluginExports[pluginId]
       delete loadedPluginMetadata[pluginId]
       delete loadedPluginCodes[pluginId]
+      delete loadedPluginReady[pluginId]
       return { success: true }
     },
     getPluginLog: async (pluginId: string) => await invoke('plugin_get_log', { id: pluginId }),
