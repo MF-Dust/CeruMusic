@@ -133,9 +133,10 @@ function createCerumusicApi(pluginId: string, pluginConsole: any) {
         body: res.body,
         statusCode: res.statusCode,
         headers: res.headers,
+        data: res.body,
       }
       if (callback) {
-        callback(null, result)
+        callback(null, result, res.body)
         return
       }
       return result
@@ -229,6 +230,16 @@ function normalizePluginInfo(info: any, fallbackName = 'Plugin') {
   }
 }
 
+function buildCurrentScriptInfo(code: string, pluginInfo: any) {
+  return {
+    name: pluginInfo?.name || 'LX Plugin',
+    description: pluginInfo?.description || '',
+    version: pluginInfo?.version || '1.0.0',
+    author: pluginInfo?.author || 'Unknown',
+    rawScript: code,
+  }
+}
+
 function normalizeSources(rawSources: any) {
   if (!rawSources) return {}
   if (Array.isArray(rawSources)) {
@@ -309,10 +320,6 @@ function extractRuntimeMetadata(
 function buildLxExports(lxState: any, cerumusic: any, code: string) {
   const requestHandler = lxState.handlers[lxState.EVENT_NAMES.request]
   if (typeof requestHandler !== 'function') return null
-  const pluginInfo = normalizePluginInfo(
-    lxState.pluginInfo || parsePluginInfoFromComments(code),
-    'LX Plugin',
-  )
   const callAction = (action: string, source: string, musicInfo: any, quality?: string) => {
     return requestHandler({
       source,
@@ -325,9 +332,13 @@ function buildLxExports(lxState: any, cerumusic: any, code: string) {
     })
   }
   return {
-    pluginInfo,
+    get pluginInfo() {
+      return normalizePluginInfo(lxState.pluginInfo || parsePluginInfoFromComments(code), 'LX Plugin')
+    },
     pluginType: 'music-source',
-    sources: lxState.sources || {},
+    get sources() {
+      return lxState.sources || {}
+    },
     cerumusic,
     musicUrl: (source: string, musicInfo: any, quality: string) =>
       callAction('musicUrl', source, musicInfo, quality),
@@ -347,6 +358,8 @@ function loadPluginSandbox(
     const moduleObj = { exports: {} as any }
     const exportsObj = moduleObj.exports
     const cerumusic = createCerumusicApi(pluginId, pluginConsole)
+    const commentInfo = parsePluginInfoFromComments(code)
+    const scriptInfo = buildCurrentScriptInfo(code, commentInfo)
     const lxState: any = {
       EVENT_NAMES: {
         inited: 'inited',
@@ -355,7 +368,7 @@ function loadPluginSandbox(
       },
       handlers: {},
       sources: null,
-      pluginInfo: null,
+      pluginInfo: commentInfo,
       readyResolve: null,
     }
     const readyPromise = new Promise<void>((resolve) => {
@@ -365,6 +378,9 @@ function loadPluginSandbox(
 
     const lx = {
       EVENT_NAMES: lxState.EVENT_NAMES,
+      env: cerumusic.env,
+      version: cerumusic.version,
+      currentScriptInfo: scriptInfo,
       on: (eventName: string, handler: any) => {
         lxState.handlers[eventName] = handler
       },
@@ -372,6 +388,7 @@ function loadPluginSandbox(
         if (eventName === lxState.EVENT_NAMES.inited) {
           lxState.sources = data?.sources || {}
           lxState.pluginInfo = data?.pluginInfo || lxState.pluginInfo
+          Object.assign(scriptInfo, buildCurrentScriptInfo(code, lxState.pluginInfo))
           lxState.readyResolve?.()
         } else if (eventName === lxState.EVENT_NAMES.updateAlert) {
           cerumusic.NoticeCenter('update', data)
@@ -698,6 +715,40 @@ async function tryPluginMusicSdk(apiName: string, args: any) {
   }
 }
 
+function isEmptyListResult(result: any) {
+  return result && typeof result === 'object' && Array.isArray(result.list) && result.list.length === 0
+}
+
+function shouldFallbackContentSource(source: string, result: any, apiName?: string) {
+  if (source === 'all') return false
+  if (isEmptyListResult(result)) return true
+  if (apiName === 'getPlaylistTags') {
+    return !((result?.hotTag?.length || 0) > 0 || (result?.tags?.length || 0) > 0)
+  }
+  return false
+}
+
+function shouldUseAggregateContentFallback(apiName: string) {
+  return ['search', 'searchPlaylist', 'getPlaylistTags', 'getCategoryPlaylists'].includes(apiName)
+}
+
+async function runAggregateContentSdk(apiName: string, args: any = {}) {
+  const Agg = musicSdk.aggregate
+  if (!Agg) return null
+  switch (apiName) {
+    case 'search':
+      return await Agg.search(args.keyword, args.page || 1, args.limit || 30)
+    case 'searchPlaylist':
+      return await Agg.searchPlaylist(args.keyword, args.page || 1, args.limit || 30)
+    case 'getPlaylistTags':
+      return await Agg.getPlaylistTags()
+    case 'getCategoryPlaylists':
+      return await Agg.getCategoryPlaylists({ ...args, source: 'all' })
+    default:
+      return null
+  }
+}
+
 async function runBuiltinMusicSdk(apiName: string, args: any = {}) {
   const source = args?.source || args?.songInfo?.source || 'wy'
   const Api = source === 'all' ? musicSdk.aggregate : musicSdk[source]
@@ -722,10 +773,25 @@ async function runBuiltinMusicSdk(apiName: string, args: any = {}) {
     }
   }
 
+  if (!Api && shouldUseAggregateContentFallback(apiName)) {
+    const fallback = await runAggregateContentSdk(apiName, args)
+    if (fallback) return fallback
+  }
+
   if (Api) {
     switch (apiName) {
-      case 'search':
-        return await Api.musicSearch.search(args.keyword, args.page || 1, args.limit || 30)
+      case 'search': {
+        try {
+          const res = await Api.musicSearch.search(args.keyword, args.page || 1, args.limit || 30)
+          return shouldFallbackContentSource(source, res, apiName)
+            ? await runAggregateContentSdk(apiName, args)
+            : res
+        } catch (e) {
+          const fallback = await runAggregateContentSdk(apiName, args)
+          if (fallback) return fallback
+          throw e
+        }
+      }
       case 'tipSearch':
         return Api.tipSearch?.search ? await Api.tipSearch.search(args.keyword) : []
       case 'getMusicUrl':
@@ -748,20 +814,39 @@ async function runBuiltinMusicSdk(apiName: string, args: any = {}) {
       }
       case 'getHotSonglist':
         return await Api.songList.getList(Api.songList.sortList[0].id, '', 1)
-      case 'getPlaylistTags':
-        return await Api.songList.getTags()
+      case 'getPlaylistTags': {
+        try {
+          const res = await Api.songList.getTags()
+          return shouldFallbackContentSource(source, res, apiName)
+            ? await runAggregateContentSdk(apiName, args)
+            : res
+        } catch (e) {
+          const fallback = await runAggregateContentSdk(apiName, args)
+          if (fallback) return fallback
+          throw e
+        }
+      }
       case 'getCategoryPlaylists': {
         const sortId = args.sortId || Api.songList.sortList?.[0]?.id || ''
         const tagId = args.tagId || ''
         const page = args.page || 1
         const limit = args.limit || Api.songList.limit_list
-        const res =
-          source === 'wy'
-            ? await Api.songList.getList(sortId, tagId, page, limit)
-            : await Api.songList.getList(sortId, tagId, page)
-        return {
-          category: { id: tagId || 'hot', name: tagId || '热门' },
-          ...res,
+        try {
+          const res =
+            source === 'wy'
+              ? await Api.songList.getList(sortId, tagId, page, limit)
+              : await Api.songList.getList(sortId, tagId, page)
+          const result = {
+            category: { id: tagId || 'hot', name: tagId || '热门' },
+            ...res,
+          }
+          return shouldFallbackContentSource(source, result, apiName)
+            ? await runAggregateContentSdk(apiName, args)
+            : result
+        } catch (e) {
+          const fallback = await runAggregateContentSdk(apiName, args)
+          if (fallback) return fallback
+          throw e
         }
       }
       case 'getPlaylistDetail':
@@ -773,8 +858,21 @@ async function runBuiltinMusicSdk(apiName: string, args: any = {}) {
         return await Api.songList.handleParseId(args.url)
       case 'getPlaylistDetailById':
         return await Api.songList.getListDetail(args.id, args.page || 1)
-      case 'searchPlaylist':
-        return await Api.songList.search(args.keyword, args.page || 1, args.limit || 30)
+      case 'searchPlaylist': {
+        if (typeof Api.songList?.search !== 'function') {
+          return await runAggregateContentSdk(apiName, args)
+        }
+        try {
+          const res = await Api.songList.search(args.keyword, args.page || 1, args.limit || 30)
+          return shouldFallbackContentSource(source, res, apiName)
+            ? await runAggregateContentSdk(apiName, args)
+            : res
+        } catch (e) {
+          const fallback = await runAggregateContentSdk(apiName, args)
+          if (fallback) return fallback
+          throw e
+        }
+      }
       case 'getLeaderboards':
         return Api.leaderboard?.getBoards ? (await Api.leaderboard.getBoards()).list : []
       case 'getLeaderboardDetail':
@@ -1436,6 +1534,7 @@ const api = {
           p.metadata || {},
         )
         if (!pluginExports) continue
+        await loadedPluginReady[pluginId]?.catch(() => {})
         await persistRuntimeMetadata(pluginId)
         const metadata = loadedPluginMetadata[pluginId]
         result.push({

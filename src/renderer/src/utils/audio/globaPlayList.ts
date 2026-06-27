@@ -1,4 +1,4 @@
-import { ref, toRaw, watch } from 'vue'
+import { ref, toRaw } from 'vue'
 import { storeToRefs } from 'pinia'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
@@ -14,10 +14,81 @@ import {
 import { waitForAudioReady, getCandidateSongs } from './audioHelpers'
 import { crossfadeManager } from './crossfade'
 
-const controlAudio = ControlAudioStore()
-const localUserStore = LocalUserDetailStore()
-const { Audio } = storeToRefs(controlAudio)
-const { list, userInfo } = storeToRefs(localUserStore)
+type AudioStore = ReturnType<typeof ControlAudioStore>
+type LocalUserStore = ReturnType<typeof LocalUserDetailStore>
+
+let controlAudioInstance: AudioStore | null = null
+let localUserStoreInstance: LocalUserStore | null = null
+let audioRefs: ReturnType<typeof storeToRefs<AudioStore>> | null = null
+let localUserRefs: ReturnType<typeof storeToRefs<LocalUserStore>> | null = null
+
+const ensureStores = () => {
+  if (!controlAudioInstance) {
+    controlAudioInstance = ControlAudioStore()
+    audioRefs = storeToRefs(controlAudioInstance)
+  }
+  if (!localUserStoreInstance) {
+    localUserStoreInstance = LocalUserDetailStore()
+    localUserRefs = storeToRefs(localUserStoreInstance)
+  }
+  return {
+    controlAudio: controlAudioInstance,
+    localUserStore: localUserStoreInstance,
+    Audio: audioRefs!.Audio,
+    list: localUserRefs!.list,
+    userInfo: localUserRefs!.userInfo
+  }
+}
+
+const controlAudio = new Proxy({} as AudioStore, {
+  get(_target, prop) {
+    return Reflect.get(ensureStores().controlAudio as any, prop)
+  },
+  set(_target, prop, value) {
+    return Reflect.set(ensureStores().controlAudio as any, prop, value)
+  }
+}) as AudioStore
+
+const localUserStore = new Proxy({} as LocalUserStore, {
+  get(_target, prop) {
+    return Reflect.get(ensureStores().localUserStore as any, prop)
+  },
+  set(_target, prop, value) {
+    return Reflect.set(ensureStores().localUserStore as any, prop, value)
+  }
+}) as LocalUserStore
+
+const Audio = {
+  get value() {
+    return ensureStores().Audio.value
+  },
+  set value(value) {
+    ensureStores().Audio.value = value
+  }
+} as any
+
+const list = {
+  get value() {
+    return ensureStores().list.value
+  },
+  set value(value) {
+    ensureStores().list.value = value
+  }
+} as any
+
+const userInfo = {
+  get value() {
+    return ensureStores().userInfo.value
+  },
+  set value(value) {
+    ensureStores().userInfo.value = value
+  }
+} as any
+
+const setUrl = (url: string) => controlAudio.setUrl(url)
+const start = () => controlAudio.start()
+const stop = () => controlAudio.stop()
+const setCurrentTime = (time: number) => controlAudio.setCurrentTime(time)
 
 const songInfo = ref<Omit<SongList, 'songmid'> & { songmid: null | number | string }>({
   songmid: null,
@@ -56,14 +127,10 @@ let _unsubscribeThrottle: (() => void) | null = null
 let _unsubscribeDisabled: (() => void) | null = null
 
 function _isThrottled(): boolean {
+  const { localUserStore } = ensureStores()
   const pluginId = localUserStore.userSource.pluginId
   return pluginId != null && (_throttledPlugins.has(pluginId) || _disabledPlugins.has(pluginId))
 }
-
-const setUrl = controlAudio.setUrl
-const start = controlAudio.start
-const stop = controlAudio.stop
-const setCurrentTime = controlAudio.setCurrentTime
 
 const cancelPendingAutoNext = () => {
   pendingAutoNextToken++
@@ -99,6 +166,7 @@ const getListenTogetherStore = async () => {
 }
 
 const handlePlay = async () => {
+  const { Audio, list, userInfo, controlAudio } = ensureStores()
   cancelPendingAutoNext()
   /* 一起听:在房间且有控制权 → 发命令给服务端,不本地播放;
    * 服务端 SYNC 回来后 ensureRoomSongLoadedAndSynced/applySnapshot 驱动本地 audio。
@@ -146,6 +214,7 @@ const handlePlay = async () => {
 }
 
 const handlePause = async () => {
+  const { Audio } = ensureStores()
   cancelPendingAutoNext()
   /* 一起听:在房间且有控制权 → 发命令,不直接 stop 本地 */
   const lt = await getListenTogetherStore()
@@ -168,6 +237,7 @@ const handlePause = async () => {
 }
 
 const togglePlayPause = async () => {
+  const { Audio } = ensureStores()
   /* 一起听:在房间且有控制权时,以"本地 audio 实际状态"判断按钮意图。
    *
    * 不能用 lt.current.isPlaying —— 那是服务端权威状态,在以下情形会与本地音频
@@ -204,6 +274,7 @@ const playSong = async (
   song: SongList,
   options: { immediate?: boolean; shouldAutoStart?: () => boolean } = {}
 ) => {
+  const { Audio, list, userInfo, controlAudio, localUserStore } = ensureStores()
   cancelPendingAutoNext()
   // 用户主动切歌，取消可能正在进行的无感过渡
   crossfadeManager.cancel()
@@ -643,6 +714,7 @@ const playSong = async (
 }
 
 const tryAutoNext = (reason: string) => {
+  const { localUserStore } = ensureStores()
   if (
     localUserStore.userSource.pluginId === undefined ||
     _isThrottled() ||
@@ -663,13 +735,17 @@ const tryAutoNext = (reason: string) => {
   playNext()
 }
 
-const playMode = ref(userInfo.value.playMode || PlayMode.SEQUENCE)
+const playMode = ref<PlayMode>(PlayMode.SEQUENCE)
 const isLoadingSong = ref(false)
 const autoNextCount = ref(0)
-const getAutoNextLimit = () => Math.max(1, Math.floor(list.value.length * 0.3))
+const getAutoNextLimit = () => {
+  const { list } = ensureStores()
+  return Math.max(1, Math.floor(list.value.length * 0.3))
+}
 
 const shuffleOrder = ref<Array<number | string>>([])
 const buildShuffleOrder = () => {
+  const { list } = ensureStores()
   const ids = list.value.map((s) => s.songmid)
   // Fisher-Yates
   for (let i = ids.length - 1; i > 0; i--) {
@@ -680,6 +756,7 @@ const buildShuffleOrder = () => {
 }
 
 const isShuffleOrderValid = () => {
+  const { list } = ensureStores()
   if (shuffleOrder.value.length !== list.value.length) return false
   const listIds = list.value.map((song) => song.songmid)
   const shuffleIds = new Set(shuffleOrder.value)
@@ -687,6 +764,7 @@ const isShuffleOrderValid = () => {
 }
 
 const ensureShuffleOrder = (rebuild = false) => {
+  const { list } = ensureStores()
   if (list.value.length === 0) {
     shuffleOrder.value = []
     return
@@ -696,28 +774,8 @@ const ensureShuffleOrder = (rebuild = false) => {
   }
 }
 
-watch(
-  () => playMode.value,
-  (mode) => {
-    if (mode === PlayMode.RANDOM) {
-      ensureShuffleOrder()
-      return
-    }
-    shuffleOrder.value = []
-  }
-)
-
-watch(
-  () => list.value,
-  () => {
-    if (playMode.value === PlayMode.RANDOM) {
-      ensureShuffleOrder(true)
-    }
-  },
-  { deep: true }
-)
-
 const updatePlayMode = () => {
+  const { userInfo } = ensureStores()
   const modes = [PlayMode.SEQUENCE, PlayMode.RANDOM, PlayMode.SINGLE]
   const currentIndex = modes.indexOf(playMode.value)
   const nextIndex = (currentIndex + 1) % modes.length
@@ -732,6 +790,7 @@ const resolveNextSong = ({
   respectSingleMode: boolean
   rebuildShuffleOnWrap: boolean
 }): SongList | null => {
+  const { list, userInfo } = ensureStores()
   if (list.value.length === 0) return null
   if (respectSingleMode && playMode.value === PlayMode.SINGLE) return null
 
@@ -885,6 +944,7 @@ const playNextAuto = () => {
 
 const setVolume = (v: number) => controlAudio.setVolume(v)
 const seekTo = (time: number) => {
+  const { Audio } = ensureStores()
   cancelPendingAutoNext()
   /* 一起听:用同步缓存的 store 引用判断;若有控制权则发命令,等 SYNC 回来再 seek 本地。
    * 第一次进房的极短窗口内 cachedLtStore 可能尚未填充 —— 此时按非房间逻辑直接 seek
@@ -961,8 +1021,16 @@ const onGlobalCtrl = (e: any) => {
 }
 
 const initPlayback = async () => {
+  const { Audio, list, userInfo, controlAudio, localUserStore } = ensureStores()
   if (playbackInstalled) return
   playbackInstalled = true
+
+  playMode.value = userInfo.value.playMode || PlayMode.SEQUENCE
+  if (playMode.value === PlayMode.RANDOM) {
+    ensureShuffleOrder(true)
+  } else {
+    shuffleOrder.value = []
+  }
 
   if (playMode.value === PlayMode.RANDOM) {
     ensureShuffleOrder(true)
@@ -1086,6 +1154,7 @@ const initPlayback = async () => {
 window.addEventListener('global-music-control', onGlobalCtrl)
 
 const uninstallPlayback = () => {
+  const { controlAudio } = ensureStores()
   if (!playbackInstalled) return
   playbackInstalled = false
 

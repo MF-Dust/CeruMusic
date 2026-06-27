@@ -903,11 +903,10 @@ onUnmounted(() => {
         :style="player.lyrics.lines.length <= 0 && showLeftPanel ? 'width:100vw' : ''"
       >
         <template v-if="playSetting.getLayoutMode === 'cd'">
-          <img
+          <div
             class="pointer"
             :class="{ playing: isAudioPlaying }"
-            src="@renderer/assets/pointer.png"
-            alt="pointer"
+            aria-hidden="true"
           />
           <div
             class="cd-container"
@@ -1293,13 +1292,44 @@ onUnmounted(() => {
         user-select: none;
         -webkit-user-drag: none;
         position: absolute;
-        width: calc(var(--cd-width-auto) / 3.5);
+        width: calc(var(--cd-width-auto) / 3.1);
+        height: calc(var(--cd-width-auto) / 13);
         left: calc(50% - 1.8vh);
-        top: calc(50% - var(--cd-width-auto) / 2 - calc(var(--cd-width-auto) / 3.5) - 1vh);
-        transform: rotate(-20deg);
-        transform-origin: 1.8vh 1.8vh;
+        top: calc(50% - var(--cd-width-auto) / 2 - calc(var(--cd-width-auto) / 9) - 1vh);
+        transform: rotate(-18deg);
+        transform-origin: 10% 50%;
         z-index: 2;
         transition: transform 0.3s;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #d2d2d2 0%, #f5f5f5 28%, #8f8f8f 100%);
+        box-shadow:
+          0 0 0 1px rgba(0, 0, 0, 0.25),
+          0 6px 16px rgba(0, 0, 0, 0.35);
+
+        &::before {
+          content: '';
+          position: absolute;
+          left: 8%;
+          top: 50%;
+          width: 22%;
+          height: 24%;
+          transform: translateY(-50%);
+          border-radius: 999px;
+          background: linear-gradient(90deg, #efefef 0%, #bdbdbd 100%);
+        }
+
+        &::after {
+          content: '';
+          position: absolute;
+          right: -1%;
+          top: 50%;
+          width: 16%;
+          height: 14%;
+          transform: translateY(-50%);
+          border-radius: 50%;
+          background: radial-gradient(circle, #ffffff 0%, #9f9f9f 70%);
+          box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18);
+        }
 
         &.playing {
           transform: rotate(0deg);

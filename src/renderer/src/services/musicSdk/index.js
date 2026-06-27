@@ -59,8 +59,13 @@ const sources = {
   mg,
   git
 }
-// 聚合源参与的源 id 顺序,决定交错合并的轮转顺序
-const AGGREGATE_ORDER = ['wy', 'kg', 'tx', 'kw', 'mg', 'git']
+// 聚合源按能力分组。kw/kg/bd 当前仅保留占位实现,直接返回空数组;
+// 放进内容聚合会让插件音源兜底也变成“可调用但无内容”。
+const SEARCH_ORDER = ['tx', 'wy']
+const PLAYLIST_SEARCH_ORDER = ['mg']
+const PLAYLIST_ORDER = ['mg', 'wy']
+const TAG_ORDER = ['mg', 'wy']
+const AGGREGATE_ORDER = ['wy', 'tx', 'mg']
 
 const interleave = (arrays) => {
   const result = []
@@ -85,9 +90,10 @@ const ensureSource = (item, source) => {
 
 const aggregate = {
   async search(keyword, page = 1, limit = 30) {
-    const tasks = AGGREGATE_ORDER.filter(
+    const ids = SEARCH_ORDER.filter(
       (id) => sources[id] && sources[id].musicSearch && sources[id].musicSearch.search
-    ).map((id) => sources[id].musicSearch.search(keyword, page, limit).catch(() => null))
+    )
+    const tasks = ids.map((id) => sources[id].musicSearch.search(keyword, page, limit).catch(() => null))
     const results = await Promise.all(tasks)
     const validResults = results.filter((r) => r && Array.isArray(r.list))
     const lists = validResults.map((res) =>
@@ -105,7 +111,7 @@ const aggregate = {
   },
 
   async searchPlaylist(keyword, page = 1, limit = 30) {
-    const tasks = AGGREGATE_ORDER.filter(
+    const tasks = PLAYLIST_SEARCH_ORDER.filter(
       (id) => sources[id] && sources[id].songList && sources[id].songList.search
     ).map((id) =>
       Promise.resolve(sources[id].songList.search(keyword, page, limit)).catch(() => null)
@@ -122,7 +128,7 @@ const aggregate = {
   },
 
   async getPlaylistTags() {
-    const ids = AGGREGATE_ORDER.filter(
+    const ids = TAG_ORDER.filter(
       (id) => sources[id] && sources[id].songList && sources[id].songList.getTags
     )
     const results = await settle(ids.map((id) => sources[id].songList.getTags()))
@@ -146,6 +152,9 @@ const aggregate = {
       }
       if (groupList.length) tags.push({ name: platName, list: groupList })
     })
+    if (!hotTag.length) {
+      hotTag.push({ id: '', name: '热门', _source: 'all' })
+    }
     return { hotTag, tags, source: 'all' }
   },
 
@@ -170,7 +179,7 @@ const aggregate = {
       }
     }
     // 热门:各源并发取热门并交错
-    const ids = AGGREGATE_ORDER.filter(
+    const ids = PLAYLIST_ORDER.filter(
       (id) =>
         sources[id] &&
         sources[id].songList &&

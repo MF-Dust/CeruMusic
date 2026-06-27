@@ -648,7 +648,6 @@ onUnmounted(() => {
           </t-dialog>
           <GlobalAudio />
           <PluginNoticeDialog />
-          <UpdateProgress />
           <t-guide v-model="guideCurrent" :steps="guideSteps" @change="onGuideChange" />
         </div>
       </NDialogProvider>

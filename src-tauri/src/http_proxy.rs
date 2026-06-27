@@ -18,6 +18,7 @@ pub struct ResponseResult {
     #[serde(rename = "statusCode")]
     status_code: u16,
     headers: HashMap<String, String>,
+    url: String,
 }
 
 #[tauri::command]
@@ -76,6 +77,7 @@ pub async fn tauri_request(url: String, options: Option<RequestOptions>) -> Resu
     let resp = req.send().await.map_err(|e| e.to_string())?;
     
     let status_code = resp.status().as_u16();
+    let final_url = resp.url().to_string();
 
     // Map response headers
     let mut resp_headers = HashMap::new();
@@ -102,5 +104,6 @@ pub async fn tauri_request(url: String, options: Option<RequestOptions>) -> Resu
         body,
         status_code,
         headers: resp_headers,
+        url: final_url,
     })
 }

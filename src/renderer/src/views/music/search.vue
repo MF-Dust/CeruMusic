@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, toRaw } from 'vue'
+import { ref, computed, watch, toRaw, onMounted, onUnmounted } from 'vue'
 import { searchValue } from '@renderer/store/search'
 import { downloadSingleSong } from '@renderer/utils/audio/download'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
@@ -53,23 +53,45 @@ const skeletonCount = playlistLimit
 const playlistTotal = ref(0)
 const search = searchValue()
 const router = useRouter()
-onActivated(async () => {
-  const localUserStore = LocalUserDetailStore()
-  console.log('sqjsqj', search.getValue)
 
-  if (search.getValue.trim() === '') {
-    console.log('跳转')
+let stopWatchSearch: (() => void) | null = null
+let stopWatchSource: (() => void) | null = null
+let stopWatchTab: (() => void) | null = null
+
+const syncSearch = async () => {
+  const nextKeyword = search.getValue.trim()
+  if (!nextKeyword) {
     router.push({ name: 'find' })
+    return
   }
-  watch(
-    search,
+  if (nextKeyword === keyword.value.trim()) return
+  keyword.value = nextKeyword
+  searchResults.value = []
+  playlistResults.value = []
+  currentPage.value = 1
+  playlistPage.value = 1
+  if (activeTab.value === 'songs') {
+    await performSearch(true)
+  } else {
+    await fetchPlaylists(true)
+  }
+}
+
+onMounted(() => {
+  const localUserStore = LocalUserDetailStore()
+
+  stopWatchSearch = watch(
+    () => search.getValue,
     async () => {
-      if (search.getFocus == true || search.getValue.trim() == keyword.value.trim()) return
-      if (search.getValue.trim() === '') {
-        router.push({ name: 'find' })
-        return
-      }
-      keyword.value = search.getValue
+      await syncSearch()
+    },
+    { immediate: true }
+  )
+
+  stopWatchSource = watch(
+    () => localUserStore.userSource,
+    async () => {
+      if (!keyword.value.trim()) return
       searchResults.value = []
       playlistResults.value = []
       currentPage.value = 1
@@ -80,30 +102,10 @@ onActivated(async () => {
         await fetchPlaylists(true)
       }
     },
-    { immediate: true }
-  )
-
-  // 监听 userSource 变化，重新加载页面
-  watch(
-    () => localUserStore.userSource,
-    async () => {
-      if (keyword.value.trim()) {
-        searchResults.value = []
-        playlistResults.value = []
-        currentPage.value = 1
-        playlistPage.value = 1
-        if (activeTab.value === 'songs') {
-          await performSearch(true)
-        } else {
-          await fetchPlaylists(true)
-        }
-      }
-    },
     { deep: true }
   )
 
-  // 标签切换按需加载
-  watch(activeTab, async (val) => {
+  stopWatchTab = watch(activeTab, async (val) => {
     if (!keyword.value.trim()) return
     if (val === 'songs' && searchResults.value.length === 0) {
       await performSearch(true)
@@ -111,6 +113,19 @@ onActivated(async () => {
       await fetchPlaylists(true)
     }
   })
+})
+
+onActivated(() => {
+  void syncSearch()
+})
+
+onUnmounted(() => {
+  stopWatchSearch?.()
+  stopWatchSearch = null
+  stopWatchSource?.()
+  stopWatchSource = null
+  stopWatchTab?.()
+  stopWatchTab = null
 })
 
 // 执行搜索
@@ -271,7 +286,7 @@ const fetchPlaylists = async (reset = false) => {
     } else {
       playlistResults.value = [...playlistResults.value, ...mapped]
     }
-    if (!reset) playlistPage.value += 1
+    playlistPage.value += 1
   } catch (e) {
     console.error('歌单搜索失败:', e)
   } finally {

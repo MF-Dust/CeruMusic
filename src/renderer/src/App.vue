@@ -11,6 +11,8 @@
       </Transition>
     </router-view>
 
+    <PlayMusic v-if="isAppReady" />
+
     <!-- 一起听 Toast —— 全屏播放器未展开时新聊天走这里(节流) -->
     <LtChatToast />
   </Provider>

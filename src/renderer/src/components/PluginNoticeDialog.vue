@@ -87,6 +87,24 @@ const notice = ref<DialogNotice | null>(null)
 const actionLoading = ref<string | null>(null)
 const noticeQueue = ref<DialogNotice[]>([]) // 通知队列
 
+const getSourceQualities = (source: any): string[] => {
+  const raw = source?.qualitys || source?.qualities || source?.quality || []
+  if (Array.isArray(raw)) return raw.map(String).filter(Boolean)
+  if (typeof raw === 'string') return raw.split('|').map((q) => q.trim()).filter(Boolean)
+  return []
+}
+
+const normalizeSources = (sources: Record<string, any>) =>
+  Object.fromEntries(
+    Object.entries(sources || {}).map(([key, source]) => [
+      key,
+      {
+        ...source,
+        qualitys: getSourceQualities(source)
+      }
+    ])
+  )
+
 // 计算属性
 const dialogWidth = computed(() => {
   return notice.value?.dialogType === 'update' ? '500px' : '400px'
@@ -196,7 +214,7 @@ const handleAction = async (actionType: string) => {
         }
         const pluginId = result.pluginId
         const pluginInfo = result.pluginInfo || {}
-        const sources = result.supportedSources || {}
+        const sources = normalizeSources(result.supportedSources || {})
         let selectSources = Object.keys(sources)[0] || ''
         if (
           typeof localUserStore.userInfo.selectSources === 'string' &&
@@ -208,6 +226,10 @@ const handleAction = async (actionType: string) => {
         if (selectSources && sources[selectSources]?.qualitys?.length) {
           const qualitys = sources[selectSources].qualitys
           selectQuality = qualitys[qualitys.length - 1]
+        }
+        if (selectSources && selectQuality) {
+          if (!localUserStore.userInfo.sourceQualityMap) localUserStore.userInfo.sourceQualityMap = {}
+          localUserStore.userInfo.sourceQualityMap[selectSources] = selectQuality
         }
         localUserStore.userInfo.pluginId = pluginId
         localUserStore.userInfo.pluginName = pluginInfo.name || ''

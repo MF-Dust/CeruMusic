@@ -62,7 +62,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { initPlayback } from '@renderer/utils/audio/globaPlayList'
 import { useAutoUpdate } from '@renderer/composables/useAutoUpdate'
 import { useSettingsStore } from '@renderer/store/Settings'
 import { storeToRefs } from 'pinia'
@@ -130,27 +129,30 @@ onMounted(async () => {
   loadingPercent.value = 80
   loadingText.value = '加载歌曲资源...'
 
-  initPlayback()
-    .catch((e) => console.error('initPlayback failed', e))
-    .finally(() => {
+  try {
+    const { initPlayback } = await import('@renderer/utils/audio/globaPlayList')
+    await initPlayback()
+  } catch (e) {
+    console.error('initPlayback failed', e)
+  } finally {
+    setTimeout(() => {
+      if (timer) {
+        clearInterval(timer)
+        timer = null
+      }
+      loadingPercent.value = 100
+      loadingText.value = '准备就绪...'
       setTimeout(() => {
-        if (timer) {
-          clearInterval(timer)
-          timer = null
-        }
-        loadingPercent.value = 100
-        loadingText.value = '准备就绪...'
-        setTimeout(() => {
-          router.replace('/home').then(() => {
-            if (settings.value.autoUpdate) {
-              setTimeout(() => {
-                checkForUpdates()
-              }, 2000)
-            }
-          })
-        }, 200)
-      }, waitTime)
-    })
+        router.replace('/home').then(() => {
+          if (settings.value.autoUpdate) {
+            setTimeout(() => {
+              checkForUpdates()
+            }, 2000)
+          }
+        })
+      }, 200)
+    }, waitTime)
+  }
 })
 
 // 清理定时器，防止路由快速切换时内存泄漏

@@ -355,6 +355,8 @@ interface PluginSource {
   name: string
   type: string
   qualitys: string[]
+  qualities?: string[]
+  quality?: string[] | string
 }
 
 interface PluginInfo {
@@ -451,6 +453,13 @@ const importPluginName = ref('')
 // 获取store实例
 const localUserStore = LocalUserDetailStore()
 
+const getSourceQualities = (source: PluginSource | undefined): string[] => {
+  const raw = source?.qualitys || source?.qualities || source?.quality || []
+  if (Array.isArray(raw)) return raw.map(String).filter(Boolean)
+  if (typeof raw === 'string') return raw.split('|').map((q) => q.trim()).filter(Boolean)
+  return []
+}
+
 // 检查插件是否被选中
 function isPluginSelected(pluginId: string): boolean {
   return localUserStore.userInfo.pluginId === pluginId
@@ -481,27 +490,35 @@ function selectPlugin(plugin: Plugin) {
     }
 
     // 转换supportedSources格式以匹配UserInfo类型，并添加 `type` 字段
-    const supportedSourcesForStore = sources
+    const supportedSourcesForStore = Object.fromEntries(
+      Object.entries(sources).map(([key, source]) => {
+        const qualitys = getSourceQualities(source)
+        return [
+          key,
+          {
+            ...source,
+            qualitys
+          }
+        ]
+      })
+    )
     let selectSources: string
     // 获取第一个音源作为默认选择
     if (
       !(typeof localUserStore.userInfo.selectSources === 'string') ||
-      !sources[localUserStore.userInfo.selectSources as unknown as string]
+      !supportedSourcesForStore[localUserStore.userInfo.selectSources as unknown as string]
     ) {
-      selectSources = Object.keys(sources)[0]
+      selectSources = Object.keys(supportedSourcesForStore)[0]
     } else {
       selectSources = localUserStore.userInfo.selectSources
     }
     let selectQuality: string
+    const qualitys = supportedSourcesForStore[selectSources]?.qualitys || []
     if (
       !(typeof localUserStore.userInfo.selectQuality === 'string') ||
-      !sources[localUserStore.userInfo.selectSources as unknown as string] ||
-      !sources[localUserStore.userInfo.selectSources as unknown as string][
-        localUserStore.userInfo.selectQuality as unknown as string
-      ]
+      !qualitys.includes(localUserStore.userInfo.selectQuality)
     ) {
-      const qualitys = sources[selectSources].qualitys
-      selectQuality = qualitys[qualitys.length - 1]
+      selectQuality = qualitys[qualitys.length - 1] || ''
     } else {
       selectQuality = localUserStore.userInfo.selectQuality
     }
@@ -512,6 +529,10 @@ function selectPlugin(plugin: Plugin) {
     localUserStore.userInfo.supportedSources = supportedSourcesForStore
     localUserStore.userInfo.selectSources = selectSources
     localUserStore.userInfo.selectQuality = selectQuality
+    if (selectSources && selectQuality) {
+      if (!localUserStore.userInfo.sourceQualityMap) localUserStore.userInfo.sourceQualityMap = {}
+      localUserStore.userInfo.sourceQualityMap[selectSources] = selectQuality
+    }
 
     MessagePlugin.success(`已选择插件: ${pluginInfo.name}`)
   } catch (err: any) {

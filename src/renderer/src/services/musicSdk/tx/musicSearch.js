@@ -1,6 +1,7 @@
 import { formatPlayTime, sizeFormate } from '../../index'
 import { formatSingerName } from '../utils'
 import { signRequest } from './utils'
+import { httpFetch } from '../../request'
 
 export default {
   limit: 50,
@@ -60,10 +61,12 @@ export default {
       }
     })
     return searchRequest.promise.then(({ body }) => {
-      console.log(body)
-      if (body.code !== this.successCode || body.req.code !== this.successCode)
+      const reqData = body?.req?.data
+      const reqSuccess =
+        body?.req?.code === this.successCode || (reqData && reqData.code === this.successCode)
+      if (body.code !== this.successCode || !reqSuccess)
         return this.musicSearch(str, page, limit, ++retryNum)
-      return body.req.data
+      return reqData || body.req.data
     })
   },
   randomInt(min, max) {
@@ -165,12 +168,54 @@ export default {
     })
     return list
   },
+  searchByLuoyue(str, page, limit) {
+    const request = httpFetch(
+      `https://api.vkeys.cn/music/tencent/search/song?keyword=${encodeURIComponent(str)}&page=${page}&limit=${limit}`,
+      { method: 'get' }
+    )
+    return request.promise.then(({ body }) => {
+      if (body?.code !== this.successCode || !Array.isArray(body?.data?.list)) {
+        throw new Error(body?.message || '落月API搜索失败')
+      }
+      const list = body.data.list.map((item) => {
+        const albumMid = item.albumMID || ''
+        const cover = item.albumImage || item.cover || ''
+        return {
+          singer: item.singer || formatSingerName(item.singerList || [], 'name'),
+          name: item.title + (item.subtitle ? ` (${item.subtitle})` : ''),
+          albumName: item.album || '',
+          albumId: albumMid,
+          source: 'tx',
+          interval: formatPlayTime(Number(item.interval) || 0),
+          songId: item.songID,
+          albumMid,
+          strMediaMid: item.mediaMid || item.songMID,
+          songmid: item.songMID,
+          img: cover,
+          types: [],
+          _types: {},
+          typeUrl: {}
+        }
+      })
+      const total = Number(body.data.meta?.total) || list.length
+      return {
+        list,
+        allPage: Math.max(1, Math.ceil(total / limit)),
+        limit,
+        total,
+        source: 'tx'
+      }
+    })
+  },
   search(str, page = 1, limit) {
     if (limit == null) limit = this.limit
-    return this.musicSearch(str, page, limit).then(({ body, meta }) => {
-      let list = this.handleResult(body.item_song)
+    return this.musicSearch(str, page, limit).then((result) => {
+      const data = result.body ? result : result.data || result
+      const list = this.handleResult(data.body?.item_song || data.item_song || [])
+      const meta = data.meta || data.body?.meta || {}
+      if (!list.length) return this.searchByLuoyue(str, page, limit)
 
-      this.total = meta.estimate_sum
+      this.total = meta.estimate_sum || list.length
       this.page = page
       this.allPage = Math.ceil(this.total / limit)
 
@@ -181,6 +226,6 @@ export default {
         total: this.total,
         source: 'tx'
       })
-    })
+    }).catch(() => this.searchByLuoyue(str, page, limit))
   }
 }

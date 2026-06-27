@@ -776,6 +776,7 @@
 }
 
 :root {
+  --play-bottom-height: 86px;
   --td-font-family: pingfang sc, microsoft yahei, arial regular;
   --td-font-family-medium: pingfang sc, microsoft yahei, arial medium;
   --td-font-size-link-small: 12px;
