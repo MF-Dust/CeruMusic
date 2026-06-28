@@ -517,7 +517,7 @@ watch(
             console.warn('Failed to clean up old album texture:', e)
           }
         }
-      }, 2000)
+      }, 1200)
     }
   },
   { immediate: true }
@@ -569,7 +569,7 @@ const initBackgroundRender = async () => {
     backgroundContainer.value.appendChild(canvas)
 
     // 设置参数
-    bgRef.value.setRenderScale(0.5)
+    bgRef.value.setRenderScale(0.38)
     bgRef.value.setFlowSpeed(1)
     bgRef.value.setFPS(30)
     bgRef.value.setHasLyric(player.value.lyrics.lines.length > 10)

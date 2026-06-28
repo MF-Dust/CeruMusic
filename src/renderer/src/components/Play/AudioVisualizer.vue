@@ -253,7 +253,7 @@ const resizeCanvas = () => {
 
   // 获取容器的实际尺寸
   const containerRect = container.getBoundingClientRect()
-  const dpr = window.devicePixelRatio || 1
+  const dpr = Math.min(window.devicePixelRatio || 1, 1.5)
 
   // 设置 canvas 的实际尺寸
   canvas.width = containerRect.width * dpr

@@ -1803,7 +1803,6 @@ watch(showFullPlay, (val) => {
 
 .comment-btn-wrapper {
   display: inline-flex;
-  will-change: opacity, transform;
 }
 
 .comment-fade-enter-active,

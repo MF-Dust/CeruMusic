@@ -16,7 +16,7 @@ utils/
 ├── lyrics/       # Desktop lyric bridge
 ├── request.ts    # Axios wrapper injecting auth headers
 ├── search.ts     # Fuzzy search helper (+ search.test.ts)
-├── file.ts, lrcParser.ts, nsfwCheck.ts | misc utilities
+├── file.ts, lrcParser.ts | misc utilities
 ```
 
 ## HIGHLIGHTS
@@ -27,7 +27,6 @@ utils/
 - `playlist/playlistExportImport.ts`: Exports/imports `.cmpl` playlist (JSON). Includes MIME helpers + file dialog integration via preload API.
 - `playlist/cloudSyncHelper.ts`: syncs playlists with cloud API via `api/songList.ts`.
 - `color/colorExtractor.ts`: Uses `color-extraction` + canvas to derive palette/dominant colors; caching via Map to avoid reprocessing images.
-- `nsfwCheck.ts`: Wraps `nsfwjs` + `@tensorflow/tfjs`; loads TF model lazily to filter album art.
 - `request.ts`: Axios instance injecting Logto token from Auth store and hooking progress callbacks.
 - `search.ts`: Fuzzy search with ordering constraints; only enable fuzzy when query length 2–4 to avoid noise.
 - `RecognitionWorker` integration: Buffer handling (byteOffset) documented in `lyrics/desktopLyricBridge.ts` and `views/music/RecognitionWorker.vue`.
@@ -41,7 +40,6 @@ utils/
 
 ## ANTI-PATTERNS
 
-- Don’t block on TensorFlow model loads during render: nsfwCheck exposes async `ensureModel()`.
 - Avoid sequential playlist file writes; use async and await OS dialogs to resolve before continuing.
 - Never mutate Axios global defaults; configure instance per module (request.ts) to avoid cross-contamination.
 

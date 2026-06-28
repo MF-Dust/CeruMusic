@@ -121,6 +121,8 @@ export async function analyzeImageColors(imageSrc: string): Promise<ImageAnalysi
           dominantColor: { r: 76, g: 116, b: 206 },
           useBlackText: false
         })
+      } finally {
+        img.src = ''
       }
     }
 
@@ -130,6 +132,7 @@ export async function analyzeImageColors(imageSrc: string): Promise<ImageAnalysi
         dominantColor: { r: 76, g: 116, b: 206 },
         useBlackText: false
       })
+      img.src = ''
     }
 
     img.src = actualSrc
@@ -267,12 +270,15 @@ export async function extractSecondaryColors(
       } catch (error) {
         console.error('提取次要颜色失败:', error)
         resolve([])
+      } finally {
+        img.src = ''
       }
     }
 
     img.onerror = () => {
       console.error('图片加载失败:', imageSrc)
       resolve([])
+      img.src = ''
     }
 
     img.src = imageSrc
@@ -481,6 +487,8 @@ export async function extractDominantColor(imageSrc: string): Promise<Color> {
         console.error('提取颜色时出错:', error)
         // 出错时使用默认颜色
         resolve({ r: 76, g: 116, b: 206 }) // 默认蓝色
+      } finally {
+        img.src = ''
       }
     }
 
@@ -488,6 +496,7 @@ export async function extractDominantColor(imageSrc: string): Promise<Color> {
       console.error('图片加载失败:', actualSrc)
       // 加载失败时使用默认颜色
       resolve({ r: 76, g: 116, b: 206 }) // 默认蓝色
+      img.src = ''
     }
 
     // 设置图片源

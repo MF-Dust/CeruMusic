@@ -135,10 +135,10 @@ watch(
 
 .global-background-media {
   position: absolute;
-  top: -10%;
-  left: -10%;
-  width: 120%;
-  height: 120%;
+  top: -4%;
+  left: -4%;
+  width: 108%;
+  height: 108%;
   transition: all 0.3s ease;
 }
 

@@ -46,7 +46,6 @@ const visible = computed(() => crossfadeState.active)
   box-shadow: 0 4px 18px rgba(0, 0, 0, 0.25);
   pointer-events: none;
   user-select: none;
-  will-change: opacity, transform;
 
   .wave {
     display: inline-flex;
@@ -116,6 +115,7 @@ const visible = computed(() => crossfadeState.active)
   transition:
     opacity 0.3s ease,
     transform 0.3s ease;
+  will-change: opacity, transform;
 }
 .hint-slide-enter-from,
 .hint-slide-leave-to {
