@@ -739,7 +739,7 @@ function shouldFallbackContentSource(source: string, result: any, apiName?: stri
 }
 
 function shouldUseAggregateContentFallback(apiName: string) {
-  return ['search', 'searchPlaylist', 'getPlaylistTags', 'getCategoryPlaylists'].includes(apiName)
+  return ['search', 'searchPlaylist', 'getPlaylistTags', 'getCategoryPlaylists', 'tipSearch', 'hotSearch'].includes(apiName)
 }
 
 async function runAggregateContentSdk(apiName: string, args: any = {}) {
@@ -750,6 +750,10 @@ async function runAggregateContentSdk(apiName: string, args: any = {}) {
       return await Agg.search(args.keyword, args.page || 1, args.limit || 30)
     case 'searchPlaylist':
       return await Agg.searchPlaylist(args.keyword, args.page || 1, args.limit || 30)
+    case 'tipSearch':
+      return await Agg.tipSearch(args.keyword)
+    case 'hotSearch':
+      return await Agg.hotSearch(args.source || 'all')
     case 'getPlaylistTags':
       return await Agg.getPlaylistTags()
     case 'getCategoryPlaylists':
@@ -803,7 +807,25 @@ async function runBuiltinMusicSdk(apiName: string, args: any = {}) {
         }
       }
       case 'tipSearch':
-        return Api.tipSearch?.search ? await Api.tipSearch.search(args.keyword) : []
+        try {
+          const res = Api.tipSearch?.search ? await Api.tipSearch.search(args.keyword) : null
+          return res && ((res.order && res.order.length) || res.songs?.length || res.artists?.length || res.albums?.length || res.playlists?.length)
+            ? res
+            : await runAggregateContentSdk(apiName, args)
+        } catch (e) {
+          const fallback = await runAggregateContentSdk(apiName, args)
+          if (fallback) return fallback
+          throw e
+        }
+      case 'hotSearch':
+        try {
+          const res = Api.hotSearch?.getList ? await Api.hotSearch.getList() : null
+          return Array.isArray(res?.list) && res.list.length ? res : await runAggregateContentSdk(apiName, args)
+        } catch (e) {
+          const fallback = await runAggregateContentSdk(apiName, args)
+          if (fallback) return fallback
+          throw e
+        }
       case 'getMusicUrl':
         if (typeof Api.getMusicUrl === 'function') {
           return await Api.getMusicUrl(args.songInfo, args.quality)

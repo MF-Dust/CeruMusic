@@ -217,6 +217,19 @@ const handleSuggestionSelect = (suggestion: any) => {
   handleSearch()
 }
 
+const handleSearchFocus = () => {
+  SearchStore.setFocus(true)
+}
+
+const handleSearchBlur = () => {
+  SearchStore.setFocus(false)
+}
+
+const currentSource = computed(() => {
+  const LocalUserDetail = LocalUserDetailStore()
+  return LocalUserDetail.userSource.source || 'wy'
+})
+
 // 已迁移到 App.vue 全局引导
 const steps = ref<GuideStep[]>([
   {
@@ -400,8 +413,8 @@ function checkGuide() {
                   placeholder="搜索音乐、歌手"
                   style="width: 100%"
                   @enter="handleKeyDown"
-                  @focus="SearchStore.setFocus(true)"
-                  @blur="SearchStore.setFocus(false)"
+                  @focus="handleSearchFocus"
+                  @blur="handleSearchBlur"
                 >
                   <template #suffix>
                     <t-button
@@ -415,7 +428,7 @@ function checkGuide() {
                     </t-button>
                   </template>
                 </t-input>
-                <SearchSuggest @to-search="handleSuggestionSelect" />
+                <SearchSuggest :source="currentSource" @to-search="handleSuggestionSelect" />
               </div>
               <TitleBarControls></TitleBarControls>
             </div>

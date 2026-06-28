@@ -65,6 +65,7 @@ const PLAYLIST_SEARCH_ORDER = ['mg', 'wy', 'kw', 'kg']
 const PLAYLIST_ORDER = ['mg', 'wy', 'kw', 'kg']
 const TAG_ORDER = ['mg', 'wy', 'kw', 'kg']
 const AGGREGATE_ORDER = ['wy', 'tx', 'mg']
+const HOT_SEARCH_ORDER = ['tx', 'wy', 'mg', 'kg', 'kw']
 
 const interleave = (arrays) => {
   const result = []
@@ -88,6 +89,29 @@ const ensureSource = (item, source) => {
 }
 
 const aggregate = {
+  async hotSearch(source = 'all') {
+    const ids =
+      source && source !== 'all'
+        ? [source, ...HOT_SEARCH_ORDER.filter((id) => id !== source)]
+        : HOT_SEARCH_ORDER
+    const tasks = ids
+      .filter((id) => sources[id] && sources[id].hotSearch && sources[id].hotSearch.getList)
+      .map((id) => Promise.resolve(sources[id].hotSearch.getList()).catch(() => null))
+    const results = await Promise.all(tasks)
+    const merged = []
+    results.forEach((res) => {
+      const list = Array.isArray(res?.list) ? res.list : Array.isArray(res) ? res : []
+      for (const item of list) {
+        const value = String(item || '').trim()
+        if (value && !merged.includes(value)) merged.push(value)
+      }
+    })
+    return {
+      source: merged.length ? 'all' : source,
+      list: merged
+    }
+  },
+
   async search(keyword, page = 1, limit = 30) {
     const ids = SEARCH_ORDER.filter(
       (id) => sources[id] && sources[id].musicSearch && sources[id].musicSearch.search
