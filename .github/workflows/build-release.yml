@@ -1,0 +1,104 @@
+name: Build Release Assets
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: Existing release tag to build and upload assets for
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-assets-${{ github.event.release.tag_name || inputs.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  release-info:
+    name: Resolve release
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.release.outputs.release_id }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      release_name: ${{ steps.release.outputs.release_name }}
+    steps:
+      - name: Resolve release metadata
+        id: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG_NAME: ${{ inputs.tag_name }}
+          RELEASE_TAG_NAME: ${{ github.event.release.tag_name }}
+          RELEASE_ID: ${{ github.event.release.id }}
+          RELEASE_NAME: ${{ github.event.release.name }}
+        run: |
+          set -euo pipefail
+
+          if [ "$EVENT_NAME" = "release" ]; then
+            tag_name="$RELEASE_TAG_NAME"
+            release_id="$RELEASE_ID"
+            release_name="$RELEASE_NAME"
+          else
+            release_json=$(curl --fail-with-body --retry 3 --retry-delay 2 -sS \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/$REPOSITORY/releases/tags/$INPUT_TAG_NAME")
+
+            tag_name=$(echo "$release_json" | jq -r '.tag_name')
+            release_id=$(echo "$release_json" | jq -r '.id')
+            release_name=$(echo "$release_json" | jq -r '.name // .tag_name')
+          fi
+
+          {
+            echo "tag_name=$tag_name"
+            echo "release_id=$release_id"
+            echo "release_name=$release_name"
+          } >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build Windows
+    needs: release-info
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-info.outputs.tag_name }}
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build and upload Tauri bundles
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          releaseId: ${{ needs.release-info.outputs.release_id }}
+          tauriScript: pnpm tauri:build
+          includeUpdaterJson: false
+          retryAttempts: 3
