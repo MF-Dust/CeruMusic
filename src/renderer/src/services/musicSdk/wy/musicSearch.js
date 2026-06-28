@@ -1,6 +1,5 @@
 import { httpFetch } from '../../request'
 import { sizeFormate, formatPlayTime } from '../../index'
-import { eapi } from './utils/crypto'
 
 export default {
   limit: 30,
@@ -9,22 +8,20 @@ export default {
   allPage: 1,
 
   musicSearch(str, page, limit) {
-    const searchRequest = httpFetch('http://interface3.music.163.com/eapi/search/song/list/page', {
-      method: 'post',
+    const searchRequest = httpFetch('https://music.163.com/api/cloudsearch/pc', {
+      method: 'get',
       headers: {
         'User-Agent':
           'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.90 Safari/537.36',
-        origin: 'https://music.163.com'
+        Referer: 'https://music.163.com/'
       },
-      form: eapi('/api/search/song/list/page', {
-        keyword: str,
-        needCorrect: '1',
-        channel: 'typing',
+      form: {
+        s: str,
+        type: 1,
         offset: limit * (page - 1),
-        scene: 'normal',
         total: page == 1,
         limit: limit
-      })
+      }
     })
     return searchRequest.promise.then(({ body }) => body)
   },
@@ -38,8 +35,6 @@ export default {
 
     return Promise.all(
       rawList.map(async (item) => {
-        item = item.baseInfo.simpleSongData
-
         const types = []
         const _types = {}
         let size
@@ -128,10 +123,10 @@ export default {
     return this.musicSearch(str, page, limit).then((result) => {
       if (!result || result.code !== 200) return this.search(str, page, limit, retryNum)
       // console.log(JSON.stringify(result.data.resources[0].baseInfo))
-      return this.handleResult(result.data.resources || []).then((list) => {
+      return this.handleResult(result.result?.songs || result.data?.resources || []).then((list) => {
         if (!list || list.length === 0) return this.search(str, page, limit, retryNum)
 
-        this.total = result.data.totalCount || 0
+        this.total = result.result?.songCount || result.data?.totalCount || 0
         this.page = page
         this.allPage = Math.ceil(this.total / this.limit)
 

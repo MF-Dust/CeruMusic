@@ -1,13 +1,11 @@
 import musicSearch from './musicSearch'
+import songList from './songList'
 
 const kg = {
   musicSearch,
   tipSearch: { search: () => Promise.resolve([]) },
   leaderboard: { getBoards: () => Promise.resolve([]) },
-  songList: {
-    getTags: () => Promise.resolve({ hotTag: [], tags: [] }),
-    getList: () => Promise.resolve({ list: [], total: 0 })
-  },
+  songList,
   hotSearch: { getList: () => Promise.resolve([]) },
   comment: { getComments: () => Promise.resolve([]) },
   singer: { getSongs: () => Promise.resolve([]) },

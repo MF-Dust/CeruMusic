@@ -61,9 +61,9 @@ const sources = {
 }
 // 聚合源按能力分组。bd 当前仅保留占位实现,直接返回空数组;
 const SEARCH_ORDER = ['tx', 'wy', 'kg', 'kw', 'mg']
-const PLAYLIST_SEARCH_ORDER = ['mg']
-const PLAYLIST_ORDER = ['mg', 'wy']
-const TAG_ORDER = ['mg', 'wy']
+const PLAYLIST_SEARCH_ORDER = ['mg', 'wy', 'kw', 'kg']
+const PLAYLIST_ORDER = ['mg', 'wy', 'kw', 'kg']
+const TAG_ORDER = ['mg', 'wy', 'kw', 'kg']
 const AGGREGATE_ORDER = ['wy', 'tx', 'mg']
 
 const interleave = (arrays) => {
@@ -166,7 +166,7 @@ const aggregate = {
       const realSort = sortId || (sm.songList.sortList && sm.songList.sortList[0]?.id) || ''
       const realLimit = limit || sm.songList.limit_list
       const res =
-        sid === 'wy'
+        sid === 'wy' || sid === 'kw' || sid === 'kg'
           ? await sm.songList.getList(realSort, realTagId, page, realLimit).catch(() => null)
           : await Promise.resolve(sm.songList.getList(realSort, realTagId, page)).catch(() => null)
       if (!res) return { list: [], total: 0, page, source: 'all' }
@@ -189,7 +189,7 @@ const aggregate = {
       const sm = sources[id].songList
       const realSort = sm.sortList[0]?.id
       const realLimit = limit || sm.limit_list
-      return id === 'wy'
+      return id === 'wy' || id === 'kw' || id === 'kg'
         ? Promise.resolve(sm.getList(realSort, '', page, realLimit)).catch(() => null)
         : Promise.resolve(sm.getList(realSort, '', page)).catch(() => null)
     })

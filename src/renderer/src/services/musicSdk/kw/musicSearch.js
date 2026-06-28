@@ -3,9 +3,32 @@ import { httpFetch } from '../../request'
 
 const decodeHtmlEntities = (str) => {
   if (!str) return ''
+  if (typeof document === 'undefined') {
+    return String(str)
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#039;/g, "'")
+  }
   const txt = document.createElement('textarea')
   txt.innerHTML = str
   return txt.value
+}
+
+export const parseKuwoJsonLike = (raw) => {
+  if (!raw || typeof raw !== 'string') return raw
+  try {
+    return JSON.parse(raw)
+  } catch {}
+
+  try {
+    // KuWo's legacy search endpoint returns a JS object literal with single quotes.
+    return Function(`"use strict";return (${raw})`)()
+  } catch {
+    return null
+  }
 }
 
 const parseTypesFromMinfo = (minfo) => {
@@ -101,14 +124,8 @@ export default {
 
     const request = httpFetch(url, { method: 'get' })
     return request.promise.then(({ body }) => {
-      let data = body
-      if (typeof data === 'string') {
-        try {
-          data = JSON.parse(data)
-        } catch {
-          return { list: [], allPage: 1, limit, total: 0, source: 'kw' }
-        }
-      }
+      const data = parseKuwoJsonLike(body)
+      if (!data) return { list: [], allPage: 1, limit, total: 0, source: 'kw' }
 
       const rawList = data?.abslist || []
       const list = this.handleResult(rawList)
