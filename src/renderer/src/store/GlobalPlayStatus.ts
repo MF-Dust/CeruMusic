@@ -7,6 +7,7 @@ import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { reactive, computed, watch, toRaw, type ComputedRef } from 'vue'
 import defaultCover from '@renderer/assets/images/song.jpg'
 import { playSetting } from './playSetting'
+import { invoke } from '@tauri-apps/api/core'
 
 interface Player {
   songId?: string
@@ -90,9 +91,10 @@ async function getBlobUrlFromUrl(url: string): Promise<string> {
   if (!url) return ''
   if (/^(data:|blob:|file:)/i.test(url)) return url
   try {
-    const response = await fetch(url)
-    const blob = await response.blob()
-    return URL.createObjectURL(blob)
+    // Tauri webview 下跨域 fetch 图片会被 CORS 拦截，且原始远程 URL 无法上传到
+    // WebGL 纹理（污染导致播放页背景纯黑、取色失败）。改走 Rust 代理转为同源 data URL。
+    const dataUrl = await invoke<string>('fetch_image_as_data_url', { url })
+    return dataUrl || ''
   } catch (e) {
     console.error('封面转Blob失败:', e)
     return ''
@@ -434,20 +436,19 @@ export const useGlobalPlayStatusStore = defineStore(
             })()
 
             try {
-              const response = await fetch(
-                `https://amll-ttml-db.stevexmh.net/${source === 'wy' ? 'ncm' : 'qq'}/${newId}`,
-                {
-                  signal: abort.signal
-                }
-              )
+              // Tauri webview 下直接 fetch 外部 TTML 库会被 CORS 拦截，改走 Rust 代理。
+              const ttmlResp: any = await invoke('tauri_request', {
+                url: `https://amll-ttml-db.stevexmh.net/${source === 'wy' ? 'ncm' : 'qq'}/${newId}`
+              })
 
               if (!active) return
 
-              if (!response.ok) {
-                throw new Error(`TTML request failed with status ${response.status}`)
+              const ttmlStatus = Number(ttmlResp?.statusCode) || 0
+              if (ttmlStatus < 200 || ttmlStatus >= 300) {
+                throw new Error(`TTML request failed with status ${ttmlStatus}`)
               }
 
-              const res = await response.text()
+              const res = typeof ttmlResp?.body === 'string' ? ttmlResp.body : ''
 
               if (!res || res.length < 100) {
                 throw new Error('ttml 无歌词')

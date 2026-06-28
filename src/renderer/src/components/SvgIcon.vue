@@ -13,7 +13,8 @@ import {
   PlayIcon,
   LockOffIcon,
   LockOnIcon,
-  CloseIcon
+  CloseIcon,
+  SubtitleIcon
 } from 'tdesign-icons-vue-next'
 
 const props = defineProps<{
@@ -30,6 +31,7 @@ const iconComponent = computed(() => {
     case 'ListLockOpen': return LockOffIcon
     case 'EyeLock': return LockOnIcon
     case 'WindowClose': return CloseIcon
+    case 'lyricOpen': return SubtitleIcon
     default: return null
   }
 })

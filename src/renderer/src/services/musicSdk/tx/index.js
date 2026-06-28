@@ -1,5 +1,6 @@
 import hotSearch from './hotSearch'
 import musicSearch from './musicSearch'
+import getLyric from './lyric'
 
 const tx = {
   hotSearch,
@@ -12,7 +13,9 @@ const tx = {
   },
   comment: { getComments: () => Promise.resolve([]) },
   singer: { getSongs: () => Promise.resolve([]) },
-  getLyric: () => Promise.resolve(''),
+  getLyric(songInfo) {
+    return getLyric(songInfo)
+  },
   getPic: () => Promise.resolve(''),
   getMusicDetailPageUrl: () => ''
 }

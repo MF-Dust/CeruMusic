@@ -32,6 +32,10 @@ import {
   uninstallGlobalMusicControls
 } from '@renderer/utils/audio/globalControls'
 import {
+  installTauriMediaBridge,
+  uninstallTauriMediaBridge
+} from '@renderer/utils/audio/tauriMediaBridge'
+import {
   installDesktopLyricBridge,
   uninstallDesktopLyricBridge
 } from '@renderer/utils/lyrics/desktopLyricBridge'
@@ -313,6 +317,23 @@ const isDesktopLyricContext = () => {
   return false
 }
 
+// F11 切换窗口化全屏，ESC 退出全屏（与 Electron 版保持一致）
+let appIsFullscreen = false
+const handleFullscreenChangedForKeys = (value: boolean) => {
+  appIsFullscreen = value
+}
+let unsubFullscreenForKeys: (() => void) | null = null
+const handleFullscreenKeys = (e: KeyboardEvent) => {
+  if (e.key === 'F11') {
+    e.preventDefault()
+    window.api?.toggleFullscreen?.()
+  } else if (e.key === 'Escape' && appIsFullscreen) {
+    e.preventDefault()
+    window.api?.setFullscreen?.(false)
+  }
+}
+
+
 onMounted(() => {
   if (isDesktopLyricContext()) return
   userInfo.init()
@@ -361,6 +382,7 @@ onMounted(() => {
   )
 
   installGlobalMusicControls()
+  installTauriMediaBridge()
   installDesktopLyricBridge()
 
   router.isReady().then(() => {
@@ -372,6 +394,11 @@ onMounted(() => {
 
   // 教程初始化监听
   window.addEventListener('guide:init', handleGuideInit as any)
+
+  // F11/ESC 全屏快捷键
+  unsubFullscreenForKeys =
+    window.api?.onFullscreenChanged?.(handleFullscreenChangedForKeys) || null
+  window.addEventListener('keydown', handleFullscreenKeys)
 
   /* 窗口重新聚焦时检查剪贴板 —— 覆盖"用户在外面复制完文案再切回客户端"的场景。
    * 用 'focus' 而不是 'visibilitychange' 因为后者在 macOS 下表现不一致。 */
@@ -571,6 +598,7 @@ onUnmounted(() => {
   stopUsageTracking()
 
   uninstallGlobalMusicControls()
+  uninstallTauriMediaBridge()
   uninstallDesktopLyricBridge()
 
   if (themeChangeHandler) {
@@ -586,6 +614,13 @@ onUnmounted(() => {
   } catch {}
   try {
     window.removeEventListener('focus', onWindowFocusForLt)
+  } catch {}
+  try {
+    window.removeEventListener('keydown', handleFullscreenKeys)
+    if (unsubFullscreenForKeys) {
+      unsubFullscreenForKeys()
+      unsubFullscreenForKeys = null
+    }
   } catch {}
 })
 </script>

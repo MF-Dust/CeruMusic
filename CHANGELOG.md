@@ -13,6 +13,41 @@
 
 ---
 
+## [Unreleased] - 开发中 · 原生能力补齐：全局快捷键 / 任务栏缩略图 / DLNA 投屏 / 全屏控制 🎹
+
+本次改动把若干在 Tauri 端仍是空壳的功能补齐为真实原生实现，并对插件歌词做回退兜底。
+
+### ⌨️ 全局媒体快捷键（原生实现）
+- 新增 `src-tauri/src/hotkeys.rs`：基于 `tauri-plugin-global-shortcut` 注册/注销全局快捷键，
+  支持 播放/暂停、上一首、下一首、音量 +/-、快进/快退 七个动作
+- 设置页 `HotkeySection.vue` 接通 `hotkeys_get` / `hotkeys_set`，可自定义加速键并回显注册冲突
+- 触发时 emit `toggle` / `playPrev` / `playNext` / `volumeDelta` / `seekDelta` 事件，与既有渲染端监听一致
+- 共享类型 `src/common/types/hotkeys.ts` 统一动作枚举与默认配置
+
+### 🪟 Windows 任务栏缩略图工具栏（原生实现）
+- 新增 `src-tauri/src/thumbar.rs`：通过 `ITaskbarList3` + `SetWindowSubclass` 实现
+  上一首 / 播放暂停 / 下一首 / 喜欢 四个缩略图按钮，点击转成与托盘/快捷键一致的 Tauri 事件
+- 渲染端 `tauri-bridge.ts` 的 `thumbar.setState/setCover/onToggleLike` 由空实现改为真实命令调用
+
+### 📺 DLNA / UPnP 投屏（原生实现）
+- 新增 `src-tauri/src/dlna.rs`：SSDP 发现 MediaRenderer 设备、SOAP 控制
+  (SetAVTransportURI+Play / Pause / Stop / Seek / 音量 / 进度)，并内置一个本地文件 HTTP 服务器
+  把本地音乐 (`file://`) 暴露给投屏设备拉取
+- 新增 `src/renderer/src/store/dlna.ts` 与 `tauri-bridge.ts` 的 `dlna.*` 命令映射
+
+### 🖥 全屏控制接通
+- 新增 `window_toggle_fullscreen` / `window_set_fullscreen` 命令与 `fullscreen-changed` 事件
+- `tauri-bridge.ts` 的 `toggleFullscreen/setFullscreen/onFullscreenChanged` 由空壳改为真实调用
+
+### 🎵 插件歌词回退兜底
+- 插件未提供歌词（不支持 / 为空）时回退到内置 SDK / TTML 歌词库，不再整体失败
+- `music.invoke('local-music:get-lyric')` 接通 `local_music_get_lyric` 命令
+
+### 🔧 其他
+- `http_proxy::fetch_image_as_data_url` 命令注册到 invoke_handler
+- `Cargo.toml` 新增 `tauri-plugin-global-shortcut` 与 Windows `windows` crate 依赖
+- 能力清单 `capabilities/default.json` 加入 `global-shortcut:default`
+
 ## [v1.14.1] - 2026-05-24 · 插件更稳，日志更清楚，窗口更顺手 🔧
 
 本次更新聚焦插件系统的健壮性与可观测性，修复 Windows 上开发版污染正式版通知/SMTC 的问题，

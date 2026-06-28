@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use reqwest::Method;
+use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::Engine;
 
 #[derive(Deserialize)]
 pub struct RequestOptions {
@@ -24,7 +26,7 @@ pub struct ResponseResult {
 #[tauri::command]
 pub async fn tauri_request(url: String, options: Option<RequestOptions>) -> Result<ResponseResult, String> {
     let client = reqwest::Client::new();
-    
+
     let opt = options.unwrap_or(RequestOptions {
         method: None,
         headers: None,
@@ -106,4 +108,36 @@ pub async fn tauri_request(url: String, options: Option<RequestOptions>) -> Resu
         headers: resp_headers,
         url: final_url,
     })
+}
+
+/// 拉取远程图片并返回 data URL。
+/// Tauri webview 下跨域 fetch 图片会被 CORS 拦截、且无法上传到 WebGL 纹理（污染），
+/// 因此封面等图片统一经此命令走 Rust 代理转为同源 data URL。
+#[tauri::command]
+pub async fn fetch_image_as_data_url(url: String) -> Result<String, String> {
+    let client = reqwest::Client::new();
+    let resp = client
+        .get(&url)
+        .header(
+            "User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        )
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !resp.status().is_success() {
+        return Err(format!("image request failed: {}", resp.status()));
+    }
+
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string())
+        .filter(|s| s.starts_with("image/"))
+        .unwrap_or_else(|| "image/jpeg".to_string());
+
+    let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
+    Ok(format!("data:{};base64,{}", content_type, BASE64.encode(&bytes)))
 }

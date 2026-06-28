@@ -59,9 +59,8 @@ const sources = {
   mg,
   git
 }
-// 聚合源按能力分组。kw/kg/bd 当前仅保留占位实现,直接返回空数组;
-// 放进内容聚合会让插件音源兜底也变成“可调用但无内容”。
-const SEARCH_ORDER = ['tx', 'wy']
+// 聚合源按能力分组。bd 当前仅保留占位实现,直接返回空数组;
+const SEARCH_ORDER = ['tx', 'wy', 'kg', 'kw', 'mg']
 const PLAYLIST_SEARCH_ORDER = ['mg']
 const PLAYLIST_ORDER = ['mg', 'wy']
 const TAG_ORDER = ['mg', 'wy']

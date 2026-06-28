@@ -1,7 +1,9 @@
-const dummyProvider = {
+import musicSearch from './musicSearch'
+
+const kw = {
+  musicSearch,
   tipSearch: { search: () => Promise.resolve([]) },
   leaderboard: { getBoards: () => Promise.resolve([]) },
-  musicSearch: { search: () => Promise.resolve({ list: [], total: 0 }) },
   songList: {
     getTags: () => Promise.resolve({ hotTag: [], tags: [] }),
     getList: () => Promise.resolve({ list: [], total: 0 })
@@ -14,4 +16,4 @@ const dummyProvider = {
   getMusicDetailPageUrl: () => ''
 }
 
-export default dummyProvider
+export default kw

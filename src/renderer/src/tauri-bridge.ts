@@ -709,8 +709,18 @@ async function tryPluginMusicSdk(apiName: string, args: any) {
       return normalizeMusicUrlResult(await normalizeMaybePromiseResult(result))
     }
     result = await callPluginMethod(pluginExports, method, [source, songInfo])
-    return await normalizeMaybePromiseResult(result)
+    const normalized = await normalizeMaybePromiseResult(result)
+    if (methodName === 'getLyric') {
+      const payload = pickLyricPayload(normalized)
+      // 插件未提供歌词（不支持/为空）时回退到内置 SDK / TTML 歌词库
+      if (payload && (payload.lyric || payload.crlyric || payload.lrc || payload.tlyric)) {
+        return payload
+      }
+      return PLUGIN_NO_MATCH
+    }
+    return normalized
   } catch (e: any) {
+    if (methodName === 'getLyric') return PLUGIN_NO_MATCH
     return { error: e?.message || String(e) }
   }
 }
@@ -970,11 +980,10 @@ const api = {
     invoke('window_set_mini_mode', { isMini })
   },
   show: () => invoke('window_show'),
-  toggleFullscreen: () => {
-    console.log('Tauri toggleFullscreen')
-  },
+  toggleFullscreen: () => invoke('window_toggle_fullscreen'),
+  setFullscreen: (value: boolean) => invoke('window_set_fullscreen', { value }),
   onFullscreenChanged: (callback: (isFullscreen: boolean) => void) => {
-    return () => {}
+    return subscribe('fullscreen-changed', (v) => callback(!!v))
   },
   onMusicCtrl: (callback: (event: any, ...args: any[]) => void) => {
     const unlistens: Promise<() => void>[] = []
@@ -1211,8 +1220,8 @@ const api = {
   },
   getUserConfig: () => invoke('get_config', { key: 'userConfig', default: {} }),
   hotkeys: {
-    get: async () => ({}),
-    set: async () => true,
+    get: async () => invoke('hotkeys_get'),
+    set: async (payload: any) => invoke('hotkeys_set', { payload }),
   },
   autoUpdater: {
     checkForUpdates: async () => ({
@@ -1431,10 +1440,28 @@ const api = {
       }
     },
   },
+  dlna: {
+    startSearch: () => invoke('dlna_start_search'),
+    stopSearch: () => invoke('dlna_stop_search'),
+    getDevices: () => invoke('dlna_get_devices'),
+    play: (url: string, location: string, title: string) =>
+      invoke('dlna_play', { args: { url, location, title } }),
+    pause: () => invoke('dlna_pause'),
+    resume: () => invoke('dlna_resume'),
+    stop: () => invoke('dlna_stop'),
+    seek: (seconds: number) => invoke('dlna_seek', { seconds: Math.round(seconds) }),
+    getVolume: () => invoke('dlna_get_volume'),
+    setVolume: (volume: number) => invoke('dlna_set_volume', { volume: Math.round(volume) }),
+    getPosition: () => invoke('dlna_get_position'),
+  },
   thumbar: {
-    setState: () => {},
-    setCover: () => {},
-    onToggleLike: () => () => {},
+    setState: (state: any) => {
+      invoke('thumbar_set_state', { state }).catch(() => {})
+    },
+    setCover: (cover: string | null) => {
+      invoke('thumbar_set_cover', { cover: cover ?? null }).catch(() => {})
+    },
+    onToggleLike: (callback: () => void) => subscribe('thumbar:toggle-like', () => callback()),
   },
   app: {
     getVersion: () => invoke('get_app_version'),
@@ -1469,7 +1496,13 @@ const api = {
       return await runBuiltinMusicSdk(apiName, args)
     },
     invoke: async (channel: string, ...args: any[]) => {
-      console.log('music.invoke:', channel, args)
+      switch (channel) {
+        case 'local-music:get-lyric':
+          return invoke('local_music_get_lyric', { songmid: String(args[0]) })
+        default:
+          console.warn('music.invoke: unhandled channel', channel, args)
+          return undefined
+      }
     },
   },
   plugins: {

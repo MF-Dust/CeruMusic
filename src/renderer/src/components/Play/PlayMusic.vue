@@ -14,8 +14,6 @@ import {
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'
-import icons from '../../assets/icon_font/icons'
-const { liebiao, shengyin } = icons
 import { storeToRefs } from 'pinia'
 import FullPlay from './FullPlay.vue'
 import PlaylistDrawer from './PlaylistDrawer.vue'
@@ -57,17 +55,112 @@ import { useListenTogetherStore } from '@renderer/store/ListenTogether'
 import { useLyricExtrasStore } from '@renderer/store/LyricExtras'
 import { getSongRealUrl } from '@renderer/utils/playlist/playlistManager'
 import { waitForAudioReady } from '@renderer/utils/audio/audioHelpers'
+import { useDlnaStore } from '@renderer/store/dlna'
 
 const controlAudio = ControlAudioStore()
 const localUserStore = LocalUserDetailStore()
 const globalPlayStatus = useGlobalPlayStatusStore()
 const lyricExtrasStore = useLyricExtrasStore()
+const dlnaStore = useDlnaStore()
 const { Audio } = storeToRefs(controlAudio)
 const { list, userInfo } = storeToRefs(localUserStore)
 const { player } = storeToRefs(globalPlayStatus)
 const songInfo = computed(() => player.value.songInfo || ({} as any))
 
 const {} = controlAudio
+
+// ===== DLNA 投屏播放路由 =====
+// 选中投屏设备时静音本地音频，由设备播放；本地仍作为“时钟”驱动歌词/进度。
+watch(
+  () => dlnaStore.currentDevice,
+  (device) => {
+    if (Audio.value.audio) {
+      Audio.value.audio.muted = !!device
+    }
+  },
+  { immediate: true }
+)
+
+// 投屏时定期把设备播放进度同步回本地时间轴（>2s 才纠偏，避免抖动）
+let dlnaSyncInterval: any = null
+watch(
+  () => dlnaStore.currentDevice,
+  (device) => {
+    if (device) {
+      if (!dlnaSyncInterval) {
+        dlnaSyncInterval = setInterval(async () => {
+          if (Audio.value.isPlay) {
+            const position = await dlnaStore.getPosition()
+            if (position && typeof position === 'number') {
+              if (Math.abs(Audio.value.currentTime - position) > 2 && Audio.value.audio) {
+                Audio.value.audio.currentTime = position
+              }
+            }
+          }
+        }, 1000)
+      }
+    } else if (dlnaSyncInterval) {
+      clearInterval(dlnaSyncInterval)
+      dlnaSyncInterval = null
+    }
+  }
+)
+
+// 切换活跃音频元素时，若正在投屏则保持静音
+watch(
+  () => Audio.value.audio,
+  (newAudio) => {
+    if (newAudio && dlnaStore.currentDevice) {
+      newAudio.muted = true
+    }
+  }
+)
+
+// 歌曲 URL 变化时，把新歌推送到投屏设备
+watch(
+  () => Audio.value.url,
+  (newUrl) => {
+    if (dlnaStore.currentDevice && newUrl) {
+      if (Audio.value.audio) Audio.value.audio.pause()
+      dlnaStore.play(newUrl, songInfo.value.name || 'CeruMusic').then(() => {
+        setTimeout(async () => {
+          if (Audio.value.audio) {
+            const pos = await dlnaStore.getPosition()
+            if (pos && typeof pos === 'number') {
+              Audio.value.audio.currentTime = pos
+            }
+            Audio.value.audio.play().catch(() => {})
+          }
+        }, 1500)
+      })
+    }
+  }
+)
+
+// 播放/暂停、音量 → 路由到投屏设备
+watch(
+  () => Audio.value.isPlay,
+  (isPlay) => {
+    if (dlnaStore.currentDevice) {
+      if (isPlay) dlnaStore.resume()
+      else dlnaStore.pause()
+    }
+  }
+)
+watch(
+  () => Audio.value.volume,
+  (newVol) => {
+    if (dlnaStore.currentDevice) {
+      dlnaStore.setVolume(newVol)
+    }
+  }
+)
+onBeforeUnmount(() => {
+  if (dlnaSyncInterval) {
+    clearInterval(dlnaSyncInterval)
+    dlnaSyncInterval = null
+  }
+})
 
 // 当前歌曲是否已在“我的喜欢”
 const likeState = ref(false)
@@ -1614,7 +1707,7 @@ watch(showFullPlay, (val) => {
             @wheel.prevent="handleVolumeWheel"
           >
             <button class="control-btn">
-              <shengyin style="width: 1.5em; height: 1.5em" />
+              <span class="iconfont icon-shengyin" style="font-size: 1.5em"></span>
             </button>
 
             <!-- 音量滑块 -->
@@ -1646,7 +1739,7 @@ watch(showFullPlay, (val) => {
                 variant="text"
                 @click.stop="togglePlaylist"
               >
-                <liebiao style="width: 1.5em; height: 1.5em" />
+                <span class="iconfont icon-liebiao" style="font-size: 1.5em"></span>
               </t-button>
             </n-badge>
           </t-tooltip>

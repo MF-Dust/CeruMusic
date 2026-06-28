@@ -1,74 +1,69 @@
-# CLAUDE.md — 12-rule template
+# CLAUDE.md
 
-These rules apply to every task in this project unless explicitly overridden.
-Bias: caution over speed on non-trivial work. Use judgment on trivial tasks.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Rule 1 — Think Before Coding
+## What this is
 
-State assumptions explicitly. If uncertain, ask rather than guess.
-Present multiple interpretations when ambiguity exists.
-Push back when a simpler approach exists.
-Stop when confused. Name what's unclear.
+Ceru Music (澜音) is a cross-platform desktop music player built on **Tauri 2 (Rust)** + **Vue 3 / Vite**. The app ships only a player + plugin runtime framework; music data comes from user-installed plugins and built-in source adapters, not from this repo.
 
-## Rule 2 — Simplicity First
+**Critical context:** this project was migrated from Electron to Tauri. The renderer still calls a `window.api` surface that originally came from an Electron preload script. That surface is now reimplemented on top of Tauri in `src/renderer/src/tauri-bridge.ts`. When you see `window.api.*` in renderer code, it resolves there — **not** to a real Electron API. Do **not** add Electron IPC or Node-only renderer dependencies; route all native behavior through `window.api` (extend the bridge) or new Tauri commands.
 
-Minimum code that solves the problem. Nothing speculative.
-No features beyond what was asked. No abstractions for single-use code.
-Test: would a senior engineer say this is overcomplicated? If yes, simplify.
+## Commands
 
-## Rule 3 — Surgical Changes
+Package manager is **pnpm** (Node 22+). Rust toolchain required for native builds.
 
-Touch only what you must. Clean up only your own mess.
-Don't "improve" adjacent code, comments, or formatting.
-Don't refactor what isn't broken. Match existing style.
+| Command | Purpose |
+| --- | --- |
+| `pnpm install` | Install JS deps |
+| `pnpm dev` / `pnpm tauri:dev` | Run the full Tauri desktop app (spawns `pnpm web:dev` for the renderer) |
+| `pnpm web:dev` | Vite renderer only at `localhost:5173`. Fast for pure UI work, but Tauri `invoke`/native calls fail outside the app shell |
+| `pnpm web:build` | `typecheck` + Vite renderer build (output to `dist/`) |
+| `pnpm build` / `pnpm tauri:build` | Build the packaged desktop app |
+| `pnpm typecheck` | `vue-tsc --noEmit -p tsconfig.web.json` |
+| `pnpm lint` | `eslint --fix` then `typecheck` |
+| `pnpm format` | Prettier across the repo |
+| `pnpm test` | Jest |
+| `pnpm docs:dev` / `pnpm docs:build` | VitePress docs site in `docs/` |
 
-## Rule 4 — Goal-Driven Execution
+For the Rust backend, run `cargo check` / `cargo clippy` / `cargo fmt` from `src-tauri/`.
 
-Define success criteria. Loop until verified.
-Don't follow steps. Define success and iterate.
-Strong success criteria let you loop independently.
+**Testing note:** `pnpm test` runs Jest, but there is currently **no `jest.config` and no project test files** (the `*.test.ts` files referenced in some `AGENTS.md` notes no longer exist). Add a Jest config when introducing the first real test. Use `pnpm typecheck` + `pnpm web:build` as the practical verification gate today.
 
-## Rule 5 — Use the model only for judgment calls
+## Architecture
 
-Use me for: classification, drafting, summarization, extraction.
-Do NOT use me for: routing, retries, deterministic transforms.
-If code can answer, code answers.
+### Process split
+- **Renderer** (`src/renderer/src`): Vue 3 SFCs, Composition API, Pinia. Two app windows are defined in `src-tauri/tauri.conf.json`: `main` and a frameless transparent `lyric-window` (route `/#/desktop-lyric`). Both windows are `decorations: false`, so the title bar is custom (`components/TitleBarControls.vue`).
+- **Rust backend** (`src-tauri/src`): every native capability is a `#[tauri::command]`. All commands are registered in `main.rs` via `generate_handler![...]`. Modules: `config` (app config + window bounds), `db` (SQLite: local-music index + user playlists), `local_music` + `scan` (filesystem library), `download`, `http_proxy` (the `tauri_request` command — a Rust HTTP client used to bypass browser CORS for plugins/cover art), `plugins` (plugin storage on disk).
 
-## Rule 6 — Token budgets are not advisory
+### The bridge: `src/renderer/src/tauri-bridge.ts` (~1700 lines)
+Single most important file. It is imported first in `main.ts` and assigns `window.api`. It:
+- Reimplements the legacy Electron `window.api` surface (window controls, downloads, autoUpdater, config, local music, plugins, etc.) over Tauri `invoke()` and `listen()`.
+- Hosts the **plugin sandbox** (`loadPluginSandbox`): plugin code runs via `new Function(...)` with an injected `cerumusic` API object and a per-plugin `console` that streams to `plugin.log`. There is **no `require`/Node access** inside plugins; plugin network requests go through `cerumusic.request` → Rust `tauri_request`. Includes a `BrowserBuffer` (Uint8Array) polyfill so Node-style plugin code runs in the browser.
 
-Per-task: 4,000 tokens. Per-session: 30,000 tokens.
-If approaching budget, summarize and start fresh.
-Surface the breach. Do not silently overrun.
+### Plugin system
+- Two plugin formats: `cr` (Ceru-native) and `lx` (LX Music-compatible; `buildLxExports` adapts LX event handlers). The UI for managing them is `components/Settings/plugins.vue`.
+- **Storage is Rust-side** (`src-tauri/src/plugins.rs`): each plugin lives at `<app_config_dir>/plugins/<sanitized-id>/` as `plugin.js`, `metadata.json`, `config.json`, `plugin.log`. Relevant commands: `plugin_save`, `plugin_save_metadata`, `plugin_delete`, `plugin_get_config`, `plugin_save_config`, `plugin_get_log`, `plugin_append_log`.
 
-## Rule 7 — Surface conflicts, don't average them
+### Built-in music SDK
+`src/renderer/src/services/musicSdk/` contains source adapters (`wy`, `tx`, `kg`, `kw`, `mg`, `bd`, `git`) derived from the LX-music SDK, aggregated in `musicSdk/index.js` and consumed by the bridge. Treat these `.js` files as vendored adapter code — match their existing style rather than rewriting.
 
-If two patterns contradict, pick one (more recent / more tested).
-Explain why. Flag the other for cleanup.
-Don't blend conflicting patterns.
+### State & audio
+- Pinia stores in `src/renderer/src/store/`, persisted with `pinia-plugin-persistedstate@4.x`. Configure persistence with `persist: { key, pick }` (or `omit`) — the legacy `paths` option is **silently ignored** in 4.x. Don't persist volatile playback state (lyrics/queue); only user settings.
+- Audio playback is a singleton `HTMLAudioElement` wrapper (`utils/audio/audioManager.ts`) wired to the `ControlAudio` store's pub/sub bus. SMTC / OS media keys via `utils/audio/useSmtc.ts`.
 
-## Rule 8 — Read before you write
+### Cloud backend
+A hosted API (`api.ceru.shiqianjiang.cn`, base in `src/common/api/config.json`) powers auth, song/playlist **sharing** (`src/renderer/src/api/share.ts`), and cloud sync. `utils/request.ts` is the Axios wrapper that injects the auth token. Real-time "listen together" uses `socket.io-client` (`store/ListenTogether.ts`).
 
-Before adding code, read exports, immediate callers, shared utilities.
-"Looks orthogonal" is dangerous. If unsure why code is structured a way, ask.
+## Conventions
 
-## Rule 9 — Tests verify intent, not just behavior
+- **Auto-imports are on.** Vue/Pinia APIs and naive-ui helpers (`useMessage`, `useDialog`, …) and tdesign (`DialogPlugin`, `NotifyPlugin`) are auto-imported via `unplugin-auto-import` / `unplugin-vue-components`. Don't add manual imports for them; see `src/renderer/auto-imports.d.ts` and `components.d.ts` (generated — don't hand-edit).
+- **Dual UI kit:** `N*` components are naive-ui, `T*`/`t-*` are tdesign-vue-next. Avoid mixing both within a single view.
+- **Path aliases** (vite.config + tsconfig.web.json): `@renderer`, `@common`, `@types`, `@components`, `@services`, `@store`, `@assets`.
+- **Nested `AGENTS.md`** files exist (repo root, `docs/`, `src/renderer/`, `src/renderer/src/store/`, `src/renderer/src/utils/`, `website/`). Follow the closest one when editing a subtree — but verify specifics against the code, as some notes (file paths, test files) have drifted from the current tree.
+- Commits follow **Conventional Commits** (`feat:`, `fix:`, `refactor:`, `chore:`). License is **AGPL-3.0-only**.
 
-Tests must encode WHY behavior matters, not just WHAT it does.
-A test that can't fail when business logic changes is wrong.
+## Gotchas
 
-## Rule 10 — Checkpoint after every significant step
-
-Summarize what was done, what's verified, what's left.
-Don't continue from a state you can't describe back.
-If you lose track, stop and restate.
-
-## Rule 11 — Match the codebase's conventions, even if you disagree
-
-Conformance > taste inside the codebase.
-If you genuinely think a convention is harmful, surface it. Don't fork silently.
-
-## Rule 12 — Fail loud
-
-"Completed" is wrong if anything was skipped silently.
-"Tests pass" is wrong if any were skipped.
-Default to surfacing uncertainty, not hiding it.
+- The directory tree in `README.md` and some `AGENTS.md` paths are partially **stale** (e.g. `services/music/service-base.ts` no longer exists; the service layer is `tauri-bridge.ts` + `services/musicSdk/`). Trust the code over those trees.
+- `pnpm web:dev` renders the UI in a plain browser; anything going through `window.api`/Tauri `invoke` will throw there. Use `pnpm dev` to exercise native paths.
+- TypeScript is configured loosely (`strict: false`, `noImplicitAny: false`) and `tauri-bridge.ts` is `@ts-nocheck`. `moduleResolution` is `bundler` so subpath imports (e.g. `nsfwjs/core`) resolve like Vite — used to avoid bundling the full 33MB nsfwjs model.

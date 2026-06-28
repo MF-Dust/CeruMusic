@@ -1,1 +1,1 @@
-{"default":{"identifier":"default","description":"Default permissions for Ceru Music desktop windows","local":true,"windows":["main","lyric-window"],"permissions":["core:default","dialog:default","dialog:allow-open","dialog:allow-save"]}}
+{"default":{"identifier":"default","description":"Default permissions for Ceru Music desktop windows","local":true,"windows":["main","lyric-window"],"permissions":["core:default","dialog:default","dialog:allow-open","dialog:allow-save","global-shortcut:default"]}}

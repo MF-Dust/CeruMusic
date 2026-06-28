@@ -44,6 +44,23 @@ const currentSong = ref<MusicItem | null>(null)
 const isPlaying = ref(false)
 const activeTab = ref<'songs' | 'playlists'>('songs')
 
+const IMPLEMENTED_SEARCH_SOURCES = new Set(['tx', 'wy', 'kg', 'kw', 'mg'])
+const SOURCE_NAME_MAP: Record<string, string> = {
+  tx: 'QQ音乐',
+  wy: '网易云',
+  kg: '酷狗音乐',
+  kw: '酷我音乐',
+  mg: '咪咕音乐',
+  bd: '波点音乐',
+  git: 'Git音乐'
+}
+const isSearchStubbed = computed(
+  () => userSource.value.source !== 'all' && !IMPLEMENTED_SEARCH_SOURCES.has(userSource.value.source)
+)
+const stubbedSourceName = computed(
+  () => SOURCE_NAME_MAP[userSource.value.source] || userSource.value.source || '未知'
+)
+
 // 歌单搜索状态
 const playlistResults = ref<any[]>([])
 const playlistLoading = ref(false)
@@ -343,6 +360,11 @@ const unescape = (str: string) => str.replace(/&#(\d+);/g, (_, dec) => String.fr
       </n-tabs>
     </div>
 
+    <div v-if="isSearchStubbed" class="search-hint">
+      <span class="hint-icon">💡</span>
+      <span>当前音源（{{ stubbedSourceName }}）暂不支持搜索，已自动使用聚合搜索结果</span>
+    </div>
+
     <!-- 结果内容区 -->
     <div class="result-content">
       <!-- 单曲列表 -->
@@ -477,6 +499,24 @@ const unescape = (str: string) => str.replace(/&#(\d+);/g, (_, dec) => String.fr
   .result-info {
     font-size: 12px;
     color: var(--search-info-color);
+  }
+}
+
+.search-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  border-radius: 6px;
+  background: var(--search-hint-bg, rgba(255, 193, 7, 0.08));
+  border: 1px solid var(--search-hint-border, rgba(255, 193, 7, 0.2));
+  font-size: 13px;
+  color: var(--search-hint-text, #b8860b);
+
+  .hint-icon {
+    font-size: 14px;
+    flex-shrink: 0;
   }
 }
 

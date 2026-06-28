@@ -3,6 +3,7 @@ import { ControlAudioStore } from '@renderer/store/ControlAudio'
 import { usePlaySettingStore } from '@renderer/store'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { useGlobalPlayStatusStore } from '@renderer/store/GlobalPlayStatus'
+import { useDlnaStore } from '@renderer/store/dlna'
 import { getSongRealUrl } from '@renderer/utils/playlist/playlistManager'
 import { isLtInRoom } from '@renderer/utils/listenTogether/state'
 import { getCandidateSongs, waitForAudioReady } from './audioHelpers'
@@ -109,12 +110,14 @@ const updateMarkRange = () => {
   try {
     const audioStore = ControlAudioStore()
     const playSetting = usePlaySettingStore()
+    const dlnaStore = useDlnaStore()
 
     const duration = audioStore.Audio.duration
     if (
       _naturalNextDelayEnabled ||
       !playSetting.getIsSeamlessTransition ||
       isLtInRoom() ||
+      dlnaStore.currentDevice ||
       !duration ||
       duration < MIN_SONG_DURATION
     ) {
@@ -190,6 +193,7 @@ const onTimeUpdate = () => {
   try {
     const audioStore = ControlAudioStore()
     const playSetting = usePlaySettingStore()
+    const dlnaStore = useDlnaStore()
 
     // 每次 timeupdate 都刷新 mark range（低成本）
     updateMarkRange()
@@ -199,6 +203,7 @@ const onTimeUpdate = () => {
     /* 一起听:房间内不做无感过渡 —— 切歌由服务端 SYNC 驱动,提前过渡会和 SYNC
      * 冲突(本地切到下一首,但服务端可能切到完全不同的歌)。 */
     if (isLtInRoom()) return
+    if (dlnaStore.currentDevice) return
     if (crossfadeState.scheduled || crossfadeState.active) return
 
     const duration = audioStore.Audio.duration

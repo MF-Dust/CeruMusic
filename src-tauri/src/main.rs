@@ -7,6 +7,9 @@ mod scan;
 mod local_music;
 mod download;
 mod plugins;
+mod hotkeys;
+mod thumbar;
+mod dlna;
 
 use std::fs;
 use std::io::{Read, Write};
@@ -234,6 +237,27 @@ fn window_show(app: AppHandle) {
         let _ = win.show();
         let _ = win.unminimize();
         let _ = win.set_focus();
+    }
+}
+
+#[tauri::command]
+fn window_toggle_fullscreen(app: AppHandle) {
+    if let Some(win) = app.get_webview_window("main") {
+        let cur = win.is_fullscreen().unwrap_or(false);
+        let next = !cur;
+        let _ = win.set_fullscreen(next);
+        let _ = app.emit("fullscreen-changed", next);
+    }
+}
+
+#[tauri::command]
+fn window_set_fullscreen(app: AppHandle, value: bool) {
+    if let Some(win) = app.get_webview_window("main") {
+        let cur = win.is_fullscreen().unwrap_or(false);
+        if cur != value {
+            let _ = win.set_fullscreen(value);
+            let _ = app.emit("fullscreen-changed", value);
+        }
     }
 }
 
@@ -533,6 +557,13 @@ fn main() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, shortcut, event| {
+                    hotkeys::handle_shortcut(app, shortcut, event);
+                })
+                .build(),
+        )
         .setup(move |app| {
             let app_handle = app.handle().clone();
             
@@ -570,8 +601,11 @@ fn main() {
             app.manage(ConfigManager::new(&app_handle));
             app.manage(DatabaseManager::new(&app_handle));
             app.manage(DownloadManager::new(&app_handle));
+            app.manage(hotkeys::HotkeyState::new());
 
             let _ = setup_tray(app);
+
+            hotkeys::init_hotkeys(&app_handle);
 
             Ok(())
         })
@@ -589,6 +623,8 @@ fn main() {
             window_maximize,
             window_close,
             window_show,
+            window_toggle_fullscreen,
+            window_set_fullscreen,
             get_app_version,
             window_set_title,
             window_set_progress,
@@ -678,9 +714,25 @@ fn main() {
             get_pending_share_ids,
             get_pending_playlist_share_ids,
             get_pending_lt_codes,
+            hotkeys::hotkeys_get,
+            hotkeys::hotkeys_set,
+            thumbar::thumbar_set_state,
+            thumbar::thumbar_set_cover,
+            dlna::dlna_start_search,
+            dlna::dlna_stop_search,
+            dlna::dlna_get_devices,
+            dlna::dlna_play,
+            dlna::dlna_pause,
+            dlna::dlna_resume,
+            dlna::dlna_stop,
+            dlna::dlna_seek,
+            dlna::dlna_get_volume,
+            dlna::dlna_set_volume,
+            dlna::dlna_get_position,
 
             // Network Bypass Proxy Command
             http_proxy::tauri_request,
+            http_proxy::fetch_image_as_data_url,
 
             // Plugin File System Commands
             plugins::plugin_select_and_add,

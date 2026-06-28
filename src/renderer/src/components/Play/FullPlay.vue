@@ -8,6 +8,8 @@ import { LyricPlayer, type LyricPlayerRef } from '@applemusic-like-lyrics/vue'
 import type { SongList } from '@renderer/types/audio'
 import { ref, computed, onMounted, watch, reactive, onBeforeUnmount, nextTick, toRaw } from 'vue'
 import { ControlAudioStore } from '@renderer/store/ControlAudio'
+import { useDlnaStore } from '@renderer/store/dlna'
+import { MessagePlugin } from 'tdesign-vue-next'
 import {
   Fullscreen1Icon,
   FullscreenExit1Icon,
@@ -391,6 +393,7 @@ onMounted(async () => {
 // 获取音频控制状态
 const controlAudio = ControlAudioStore()
 const { Audio } = storeToRefs(controlAudio)
+const dlnaStore = useDlnaStore()
 
 // 响应式播放状态
 const isAudioPlaying = ref(false)
@@ -473,6 +476,10 @@ const actualCoverImage = computed(() => {
 })
 
 const jumpTime = (e) => {
+  if (dlnaStore.currentDevice) {
+    MessagePlugin.warning('投屏模式下不支持拖拽进度')
+    return
+  }
   if (Audio.value.audio) Audio.value.audio.currentTime = e.line.getLine().startTime / 1000
 }
 // 背景渲染懒加载状态：仅在首次进入全屏时初始化 PIXI，避免在最小化播放栏期间空跑
@@ -975,9 +982,7 @@ onUnmounted(() => {
           :word-fade-width="0.5"
           :playing="isAudioPlaying"
           class="lyric-player"
-          :align-position="
-            playSetting.getLayoutMode === 'cd' && playSetting.getShowLeftPanel ? 0.5 : 0.34
-          "
+          :align-position="playSetting.getShowLeftPanel ? 0.5 : 0.34"
           :enable-blur="playSetting.getIsBlurLyric"
           :enable-spring="playSetting.getisJumpLyric"
           :enable-scale="playSetting.getisJumpLyric"
@@ -1259,7 +1264,7 @@ onUnmounted(() => {
   .playbox {
     width: 100%;
     height: 100%;
-    background-color: rgba(0, 0, 0, 0.256);
+    background-color: rgba(0, 0, 0, 0.08);
     -webkit-drop-filter: blur(80px);
     padding: 0 10vw;
     -webkit-drop-filter: blur(80px);
@@ -1506,7 +1511,6 @@ onUnmounted(() => {
 
       :deep(.lyric-player) {
         height: calc(100vh - var(--play-bottom-height));
-        transform: translateY(-80px);
         --amll-lyric-view-color: v-bind(lyricViewColor);
         --amll-lp-color: v-bind(lyricViewColor);
         --amll-lyric-player-font-size: v-bind(lyricFontSize);
@@ -1527,7 +1531,7 @@ onUnmounted(() => {
 
         [class^='_interludeDots'] {
           // left: 1.2em;
-          padding: auto;
+          padding: 0;
           height: calc(var(--amll-lyric-player-font-size) + 1em);
           justify-content: center;
           align-items: center;
@@ -1540,8 +1544,7 @@ onUnmounted(() => {
       }
 
       padding: 0 20px;
-
-      margin: 80px 0 calc(var(--play-bottom-height)) 0;
+      margin: 20px 0 calc(var(--play-bottom-height)) 0;
       overflow: hidden;
     }
 
@@ -1561,6 +1564,10 @@ onUnmounted(() => {
     }
 
     &.single-column {
+      .playbox {
+        background-color: rgba(0, 0, 0, 0.02);
+      }
+
       .left {
         width: 0 !important;
         padding: 0 !important;
@@ -1580,6 +1587,8 @@ onUnmounted(() => {
           width: 100%;
           max-width: 1000px;
           margin: 0 auto;
+          height: 100%;
+          transform: none;
         }
       }
     }
