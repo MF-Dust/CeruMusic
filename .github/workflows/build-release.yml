@@ -6,8 +6,10 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: Existing release tag to build and upload assets for
+        description: Release tag to create or upload assets for
         required: true
+      release_name:
+        description: Optional release name
 
 permissions:
   contents: write
@@ -28,10 +30,9 @@ jobs:
       - name: Resolve release metadata
         id: release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPOSITORY: ${{ github.repository }}
           EVENT_NAME: ${{ github.event_name }}
           INPUT_TAG_NAME: ${{ inputs.tag_name }}
+          INPUT_RELEASE_NAME: ${{ inputs.release_name }}
           RELEASE_TAG_NAME: ${{ github.event.release.tag_name }}
           RELEASE_ID: ${{ github.event.release.id }}
           RELEASE_NAME: ${{ github.event.release.name }}
@@ -43,14 +44,9 @@ jobs:
             release_id="$RELEASE_ID"
             release_name="$RELEASE_NAME"
           else
-            release_json=$(curl --fail-with-body --retry 3 --retry-delay 2 -sS \
-              -H "Authorization: Bearer $GITHUB_TOKEN" \
-              -H "Accept: application/vnd.github.v3+json" \
-              "https://api.github.com/repos/$REPOSITORY/releases/tags/$INPUT_TAG_NAME")
-
-            tag_name=$(echo "$release_json" | jq -r '.tag_name')
-            release_id=$(echo "$release_json" | jq -r '.id')
-            release_name=$(echo "$release_json" | jq -r '.name // .tag_name')
+            tag_name="$INPUT_TAG_NAME"
+            release_id=""
+            release_name="${INPUT_RELEASE_NAME:-$INPUT_TAG_NAME}"
           fi
 
           {
@@ -68,7 +64,7 @@ jobs:
       - name: Checkout release tag
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.release-info.outputs.tag_name }}
+          ref: ${{ github.event_name == 'release' && github.event.release.tag_name || github.sha }}
           fetch-depth: 0
 
       - name: Setup pnpm
@@ -94,11 +90,25 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build and upload Tauri bundles
+        if: github.event_name == 'release'
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           releaseId: ${{ needs.release-info.outputs.release_id }}
+          tauriScript: pnpm tauri:build
+          includeUpdaterJson: false
+          retryAttempts: 3
+
+      - name: Build and create release assets
+        if: github.event_name != 'release'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ needs.release-info.outputs.tag_name }}
+          releaseName: ${{ needs.release-info.outputs.release_name }}
+          releaseCommitish: ${{ github.sha }}
           tauriScript: pnpm tauri:build
           includeUpdaterJson: false
           retryAttempts: 3
