@@ -37,6 +37,16 @@ const componentId = ref<string>(`visualizer-${Date.now()}-${Math.random()}`)
 const controlAudio = ControlAudioStore()
 const { Audio } = storeToRefs(controlAudio)
 
+// 预先计算渐变结束颜色，避免在渲染循环中进行正则替换和字符串分配
+const endColor = ref('')
+watch(
+  () => props.color,
+  (val) => {
+    endColor.value = val.replace(/[\d\.]+\)$/g, '0.3)')
+  },
+  { immediate: true }
+)
+
 // 初始化音频分析器
 const initAudioAnalyser = () => {
   if (!Audio.value.audio) return
@@ -142,7 +152,7 @@ const draw = (ts?: number) => {
   // 每帧仅创建一次渐变（自底向上），减少对象分配
   const gradient = ctx.createLinearGradient(0, canvasHeight, 0, 0)
   gradient.addColorStop(0, props.color)
-  gradient.addColorStop(1, props.color.replace(/[\d\.]+\)$/g, '0.3)'))
+  gradient.addColorStop(1, endColor.value)
   ctx.fillStyle = gradient
 
   // 绘制对称频谱

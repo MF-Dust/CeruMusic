@@ -130,14 +130,21 @@ const getRoutePreloadEnabled = () => {
     const saved = localStorage.getItem('appSettings')
     if (saved) {
       const parsed = JSON.parse(saved) as { routePreloadEnabled?: boolean }
+      const defaultOffKey = 'ceru_route_preload_default_off_v1'
+      if (localStorage.getItem(defaultOffKey) !== '1') {
+        parsed.routePreloadEnabled = false
+        localStorage.setItem(defaultOffKey, '1')
+        localStorage.setItem('appSettings', JSON.stringify(parsed))
+        return false
+      }
       if (typeof parsed.routePreloadEnabled === 'boolean') {
         return parsed.routePreloadEnabled
       }
     }
   } catch {
-    return true
+    return false
   }
-  return true
+  return false
 }
 
 // 在浏览器空闲时进行预加载

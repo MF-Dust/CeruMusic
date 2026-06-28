@@ -10,7 +10,7 @@
   -->
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 
 import {
@@ -40,14 +40,15 @@ import {
   uninstallDesktopLyricBridge
 } from '@renderer/utils/lyrics/desktopLyricBridge'
 import { useRouter } from 'vue-router'
-import AudioOutputSettings from '@renderer/components/Settings/AudioOutputSettings.vue'
-import { useAudioOutputStore } from '@renderer/store/audioOutput'
 import { tryShowListenTogetherInvite } from '@renderer/services/listenTogetherInvite'
+
+const AudioOutputSettings = defineAsyncComponent(
+  () => import('@renderer/components/Settings/AudioOutputSettings.vue')
+)
 
 const userInfo = LocalUserDetailStore()
 
 const settingsStore = useSettingsStore()
-const audioOutputStore = useAudioOutputStore()
 const { settings } = settingsStore
 const processedPaths = new Set<string>()
 const audioSelectorVisible = ref(false)
@@ -678,8 +679,9 @@ onUnmounted(() => {
             :footer="false"
             width="80vw"
             placement="center"
+            :destroy-on-close="true"
           >
-            <AudioOutputSettings :embedded="true" />
+            <AudioOutputSettings v-if="audioSelectorVisible" :embedded="true" />
           </t-dialog>
           <GlobalAudio />
           <PluginNoticeDialog />

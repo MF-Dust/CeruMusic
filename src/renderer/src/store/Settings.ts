@@ -48,6 +48,8 @@ export interface SettingsState {
 export const useSettingsStore = defineStore(
   'settings',
   () => {
+    const routePreloadDefaultOffKey = 'ceru_route_preload_default_off_v1'
+
     // 默认设置
     const defaultSettings: SettingsState = {
       autoCacheMusic: true,
@@ -71,7 +73,7 @@ export const useSettingsStore = defineStore(
       isDarkMode: false,
       followSystemTheme: false,
       springFestivalDisabled: false,
-      routePreloadEnabled: true,
+      routePreloadEnabled: false,
       macStatusBarLyricEnabled: false,
       globalBackground: {
         enable: false,
@@ -89,7 +91,7 @@ export const useSettingsStore = defineStore(
         const saved = localStorage.getItem('appSettings')
         if (saved) {
           const parsed = JSON.parse(saved) as SettingsState
-          return {
+          const merged = {
             ...defaultSettings,
             ...parsed,
             tagWriteOptions: {
@@ -110,6 +112,12 @@ export const useSettingsStore = defineStore(
                 (defaultSettings.tagWriteOptions as TagWriteOptions).lyricFormat
             }
           }
+          if (localStorage.getItem(routePreloadDefaultOffKey) !== '1') {
+            merged.routePreloadEnabled = false
+            localStorage.setItem(routePreloadDefaultOffKey, '1')
+            localStorage.setItem('appSettings', JSON.stringify(merged))
+          }
+          return merged
         }
       } catch (error) {
         console.error('加载设置失败:', error)
@@ -157,7 +165,7 @@ export const useSettingsStore = defineStore(
         settings.value.springFestivalDisabled = false
       }
       if (typeof settings.value.routePreloadEnabled === 'undefined') {
-        settings.value.routePreloadEnabled = true
+        settings.value.routePreloadEnabled = false
       }
       if (typeof settings.value.macStatusBarLyricEnabled === 'undefined') {
         settings.value.macStatusBarLyricEnabled = false

@@ -1,5 +1,6 @@
 import DefaultCover from '@renderer/assets/images/Default.jpg'
 import CoverImage from '@renderer/assets/images/cover.png'
+import { getSharedCanvas } from '@renderer/utils/canvasCache'
 
 /**
  * 直接从图片分析平均亮度，不依赖颜色提取器
@@ -34,17 +35,14 @@ async function getImageAverageLuminance(imageSrc: string): Promise<number> {
 
     img.onload = () => {
       try {
-        const canvas = document.createElement('canvas')
-        const ctx = canvas.getContext('2d')
-        if (!ctx) {
+        // 使用较小的采样尺寸提高性能
+        const size = 50
+        const canvasContext = getSharedCanvas(size)
+        if (!canvasContext) {
           reject(new Error('无法创建canvas上下文'))
           return
         }
-
-        // 使用较小的采样尺寸提高性能
-        const size = 50
-        canvas.width = size
-        canvas.height = size
+        const { ctx } = canvasContext
 
         ctx.drawImage(img, 0, 0, size, size)
         const imageData = ctx.getImageData(0, 0, size, size).data

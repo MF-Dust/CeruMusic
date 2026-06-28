@@ -133,21 +133,16 @@ export function installDesktopLyricBridge() {
   // Push first snapshot
   pushSnapshot()
 
-  // Listen to ready/open-change events
-  listen('lyric-window-ready', () => {
-    pushSnapshot()
-  }).then((un) => unlistens.push(un))
-
-  listen('desktop-lyric-open-change', (event: any) => {
-    if (event.payload) pushSnapshot()
-  }).then((un) => unlistens.push(un))
-
   // RAF loop. The lyric window interpolates progress with its own clock and only
   // re-syncs when our currentMs drifts >300ms, so throttle the progress emit to
   // ~4/s rather than firing an IPC message every animation frame (~60/s).
+  let lyricWindowOpen = false
   let lastProgressEmit = 0
   const loop = () => {
-    if (!installed) return
+    if (!installed || !lyricWindowOpen) {
+      rafId = null
+      return
+    }
 
     const { ms, idx, progress } = computeState()
     const now = performance.now()
@@ -168,7 +163,34 @@ export function installDesktopLyricBridge() {
     rafId = requestAnimationFrame(loop)
   }
 
-  rafId = requestAnimationFrame(loop)
+  const startLoop = () => {
+    if (rafId !== null) return
+    lastProgressEmit = 0
+    rafId = requestAnimationFrame(loop)
+  }
+
+  const stopLoop = () => {
+    if (rafId === null) return
+    cancelAnimationFrame(rafId)
+    rafId = null
+  }
+
+  // Listen to ready/open-change events
+  listen('lyric-window-ready', () => {
+    lyricWindowOpen = true
+    pushSnapshot()
+    startLoop()
+  }).then((un) => unlistens.push(un))
+
+  listen('desktop-lyric-open-change', (event: any) => {
+    lyricWindowOpen = !!event.payload
+    if (lyricWindowOpen) {
+      pushSnapshot()
+      startLoop()
+    } else {
+      stopLoop()
+    }
+  }).then((un) => unlistens.push(un))
 
   // Save watcher cleanup
   unlistens.push(() => {

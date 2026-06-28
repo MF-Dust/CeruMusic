@@ -34,9 +34,21 @@ provide('audioSubscribe', audioStore.subscribe)
 // 判断事件是否来自当前活跃槽
 const isPrimarySlot = (slot: AudioSlot) => audioStore.Audio.primarySlot === slot
 
+const audioGraphNeeded = () => {
+  const effects = effectStore
+  return (
+    eqStore.enabled ||
+    (effects.bassBoost.enabled && effects.bassBoost.gain !== 0) ||
+    (effects.surround.enabled && effects.surround.mode !== 'off') ||
+    (effects.balance.enabled && effects.balance.value !== 0) ||
+    effects.loudness.enabled
+  )
+}
+
+const hasAudioGraph = (el: HTMLAudioElement) => !!AudioManager.getAudioContextStats(el)
+
 // 应用均衡器设置
 const applyGlobalEQ = (el: HTMLAudioElement) => {
-  AudioManager.getOrCreateAudioSource(el)
   const { enabled, gains } = storeToRefs(eqStore)
   const targetGains = enabled.value ? gains.value : new Array(10).fill(0)
   targetGains.forEach((gain, index) => {
@@ -70,13 +82,21 @@ const applyGlobalEffects = (el: HTMLAudioElement) => {
 
 // 对两个元素都应用 EQ / Effects
 const applyToBoth = () => {
-  if (audioARef.value) {
-    applyGlobalEQ(audioARef.value)
-    applyGlobalEffects(audioARef.value)
-  }
-  if (audioBRef.value) {
-    applyGlobalEQ(audioBRef.value)
-    applyGlobalEffects(audioBRef.value)
+  const shouldCreateGraph = audioGraphNeeded()
+  for (const el of [audioARef.value, audioBRef.value]) {
+    if (!el) continue
+    const hasGraph = hasAudioGraph(el)
+    if (!hasGraph && !shouldCreateGraph) continue
+    if (!hasGraph) {
+      AudioManager.getOrCreateAudioSource(el)
+      if (audioOutputStore.currentDeviceId !== 'default') {
+        AudioManager.setAudioOutputDevice(el, audioOutputStore.currentDeviceId).catch((error) => {
+          console.warn('AudioManager: Failed to apply output device after graph creation:', error)
+        })
+      }
+    }
+    applyGlobalEQ(el)
+    applyGlobalEffects(el)
   }
 }
 
@@ -290,11 +310,13 @@ const startSetupInterval = (): void => {
   if (rafId !== null) return
   const onFrame = () => {
     const activeEl = audioStore.Audio.audio
-    if (activeEl && !activeEl.paused) {
+    if (activeEl && !activeEl.paused && !activeEl.ended) {
       audioStore.publish('timeupdate')
       audioStore.setCurrentTime(activeEl.currentTime || 0)
+      rafId = requestAnimationFrame(onFrame)
+    } else {
+      rafId = null
     }
-    rafId = requestAnimationFrame(onFrame)
   }
   rafId = requestAnimationFrame(onFrame)
 }

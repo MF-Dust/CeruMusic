@@ -265,10 +265,24 @@ watch(
 
 watch(audio, (newAudio) => {
   if (newAudio) {
-    setupVisualizer()
+    stopVisualization()
+    if (audioStore.Audio.isPlay) {
+      startVisualization()
+    }
     applyGains()
   }
 })
+
+watch(
+  () => audioStore.Audio.isPlay,
+  (isPlaying) => {
+    if (isPlaying) {
+      startVisualization()
+    } else {
+      stopVisualization()
+    }
+  }
+)
 
 // Preset handling
 const handlePresetChange = (val: string) => {
@@ -415,8 +429,9 @@ const handleFileImport = async (event: Event) => {
 }
 
 // Visualizer
-const setupVisualizer = () => {
-  if (!audio.value || !canvasRef.value) return
+const startVisualization = () => {
+  if (!audio.value || !canvasRef.value || animationId) return
+  if (!audioStore.Audio.isPlay) return
 
   // Update canvas size to match container
   resizeCanvas()
@@ -432,7 +447,10 @@ const setupVisualizer = () => {
   const dataArray = new Uint8Array(bufferLength)
 
   const draw = () => {
-    if (!analyser || !ctx || !canvasRef.value) return
+    if (!analyser || !ctx || !canvasRef.value || !audioStore.Audio.isPlay) {
+      stopVisualization()
+      return
+    }
     animationId = requestAnimationFrame(draw)
 
     analyser.getByteFrequencyData(dataArray)
@@ -447,21 +465,27 @@ const setupVisualizer = () => {
     let barHeight
     let x = 0
 
+    // 将渐变移动到循环外部，避免每帧中每条柱状图都重复创建渐变对象，节约 CPU/GPU 开销
+    const gradient = ctx.createLinearGradient(0, height, 0, 0)
+    gradient.addColorStop(0, '#00f260')
+    gradient.addColorStop(1, '#0575e6')
+    ctx.fillStyle = gradient
+
     for (let i = 0; i < bufferLength; i++) {
       barHeight = dataArray[i] / 2
-
-      const gradient = ctx.createLinearGradient(0, height, 0, 0)
-      gradient.addColorStop(0, '#00f260')
-      gradient.addColorStop(1, '#0575e6')
-
-      ctx.fillStyle = gradient
       ctx.fillRect(x, height - barHeight, barWidth, barHeight)
-
       x += barWidth + 1
     }
   }
 
   draw()
+}
+
+const stopVisualization = () => {
+  if (animationId) {
+    cancelAnimationFrame(animationId)
+    animationId = 0
+  }
 }
 
 // Resize canvas to match container width
@@ -477,7 +501,9 @@ const resizeCanvas = () => {
 
 onMounted(() => {
   if (audio.value) {
-    setupVisualizer()
+    if (audioStore.Audio.isPlay) {
+      startVisualization()
+    }
     applyGains()
   }
 
@@ -486,7 +512,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  if (animationId) cancelAnimationFrame(animationId)
+  stopVisualization()
   AudioManager.removeAnalyser('eq-visualizer')
 
   // Remove window resize listener

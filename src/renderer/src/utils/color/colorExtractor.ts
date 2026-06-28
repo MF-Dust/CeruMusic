@@ -1,5 +1,6 @@
 import DefaultCover from '@renderer/assets/images/Default.jpg'
 import CoverImage from '@renderer/assets/images/cover.png'
+import { getSharedCanvas } from '@renderer/utils/canvasCache'
 
 /**
  * 颜色对象
@@ -50,16 +51,13 @@ export async function analyzeImageColors(imageSrc: string): Promise<ImageAnalysi
 
     img.onload = () => {
       try {
-        const canvas = document.createElement('canvas')
-        const ctx = canvas.getContext('2d')
-        if (!ctx) {
+        const size = 100
+        const canvasContext = getSharedCanvas(size)
+        if (!canvasContext) {
           reject(new Error('无法创建canvas上下文'))
           return
         }
-
-        const size = 100
-        canvas.width = size
-        canvas.height = size
+        const { ctx } = canvasContext
 
         ctx.drawImage(img, 0, 0, size, size)
         const imageData = ctx.getImageData(0, 0, size, size).data
@@ -197,18 +195,14 @@ export async function extractSecondaryColors(
 
     img.onload = () => {
       try {
-        // 创建canvas来分析图片
-        const canvas = document.createElement('canvas')
-        const ctx = canvas.getContext('2d')
-        if (!ctx) {
+        // 使用共享canvas来分析图片
+        const size = 100
+        const canvasContext = getSharedCanvas(size)
+        if (!canvasContext) {
           resolve([])
           return
         }
-
-        // 设置canvas大小
-        const size = 100
-        canvas.width = size
-        canvas.height = size
+        const { ctx } = canvasContext
 
         // 在canvas上绘制图片
         ctx.drawImage(img, 0, 0, size, size)
@@ -424,19 +418,14 @@ export async function extractDominantColor(imageSrc: string): Promise<Color> {
 
     img.onload = () => {
       try {
-        // 创建canvas来分析图片
-        const canvas = document.createElement('canvas')
-        const ctx = canvas.getContext('2d')
-        if (!ctx) {
+        // 使用共享canvas来分析图片
+        const size = 100
+        const canvasContext = getSharedCanvas(size)
+        if (!canvasContext) {
           reject(new Error('无法创建canvas上下文'))
           return
         }
-
-        // 设置canvas大小为图片的缩略图大小以提高性能
-        // 增加采样尺寸以获取更准确的颜色
-        const size = 100
-        canvas.width = size
-        canvas.height = size
+        const { ctx } = canvasContext
 
         // 在canvas上绘制图片
         ctx.drawImage(img, 0, 0, size, size)

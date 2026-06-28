@@ -76,6 +76,20 @@ const currentToken = ref<number>(0)
 // 是否可视
 const isCanLook = useElementVisibility(imgContainer)
 
+const releaseImage = () => {
+  loadToken.value += 1
+  currentToken.value = -1
+  try {
+    if (imgRef.value) {
+      imgRef.value.removeAttribute('src')
+      imgRef.value.src = ''
+    }
+  } catch {
+    /* empty */
+  }
+  imgSrc.value = undefined
+}
+
 // 图片加载完成
 const imageLoaded = (e: Event) => {
   // 竞态保护：仅响应最新一次设置的图片
@@ -116,7 +130,7 @@ watch(
       }
     } else if (props.releaseOnHide) {
       // 释放图片以回收内存
-      if (imgSrc.value !== undefined) imgSrc.value = undefined
+      if (imgSrc.value !== undefined) releaseImage()
     }
   },
   { immediate: true }
@@ -137,7 +151,7 @@ watch(
         }
       } else {
         if (props.releaseOnHide) {
-          if (imgSrc.value !== undefined) imgSrc.value = undefined
+          if (imgSrc.value !== undefined) releaseImage()
         }
       }
     } else {
@@ -152,12 +166,7 @@ watch(
 )
 
 onUnmounted(() => {
-  try {
-    if (imgRef.value) imgRef.value.src = ''
-  } catch {
-    /* empty */
-  }
-  imgSrc.value = undefined
+  releaseImage()
   imgRef.value = undefined
   imgContainer.value = undefined
 })

@@ -1,7 +1,6 @@
 import { defineStore } from 'pinia'
 import type { LyricLine } from '@applemusic-like-lyrics/core'
 import { analyzeImageColors, Color } from '@renderer/utils/color/colorExtractor'
-import { parseYrc, parseLrc, parseTTML, parseQrc } from '@applemusic-like-lyrics/lyric'
 import type { SongList } from '@renderer/types/audio'
 import { LocalUserDetailStore } from '@renderer/store/LocalUserDetail'
 import { reactive, computed, watch, toRaw, type ComputedRef } from 'vue'
@@ -85,6 +84,16 @@ export interface CommentResponse {
   page: number
   limit: number
   maxPage: number
+}
+
+type LyricParserModule = typeof import('@applemusic-like-lyrics/lyric')
+let lyricParserModulePromise: Promise<LyricParserModule> | null = null
+
+const loadLyricParsers = () => {
+  if (!lyricParserModulePromise) {
+    lyricParserModulePromise = import('@applemusic-like-lyrics/lyric')
+  }
+  return lyricParserModulePromise
 }
 
 async function getBlobUrlFromUrl(url: string): Promise<string> {
@@ -271,12 +280,22 @@ export const useGlobalPlayStatusStore = defineStore(
       { immediate: true }
     )
     // 监听 cover 变化，提取颜色
+    let coverAnalysisToken = 0
     watch(
-      () => player.cover,
-      async (newCover) => {
-        if (!newCover) return
+      () => [player.cover, player.songInfo?.songmid] as const,
+      async ([newCover, songmid]) => {
+        const token = ++coverAnalysisToken
+        if (!songmid) {
+          resetColors()
+          return
+        }
+        if (!newCover) {
+          resetColors()
+          return
+        }
         try {
           const { dominantColor, useBlackText } = await analyzeImageColors(newCover)
+          if (token !== coverAnalysisToken) return
           player.coverDetail.ColorObject = dominantColor
           player.coverDetail.mainColor = `rgba(${dominantColor.r},${dominantColor.g},${dominantColor.b},1)`
 
@@ -302,13 +321,16 @@ export const useGlobalPlayStatusStore = defineStore(
           console.log('useBlackText', player.coverDetail.useBlackText)
         } catch (e) {
           console.error('颜色提取失败', e)
+          if (token !== coverAnalysisToken) return
           // 恢复默认
           resetColors()
         }
-      }
+      },
+      { immediate: true }
     )
 
     function resetColors() {
+      player.coverDetail.ColorObject = void 0
       player.coverDetail.mainColor = 'var(--td-brand-color-5)'
       player.coverDetail.lightMainColor = 'rgba(255, 255, 255, 0.9)'
       player.coverDetail.contrastColor = 'var(--player-text-idle)'
@@ -316,6 +338,7 @@ export const useGlobalPlayStatusStore = defineStore(
       player.coverDetail.hoverColor = 'var(--player-text-hover-idle)'
       player.coverDetail.playBg = 'var(--player-btn-bg-idle)'
       player.coverDetail.playBgHover = 'var(--player-btn-bg-hover-idle)'
+      player.coverDetail.useBlackText = false
     }
 
     // 监听歌曲ID变化，获取歌词, 评论
@@ -350,6 +373,9 @@ export const useGlobalPlayStatusStore = defineStore(
 
         const getCleanSongInfo = () => JSON.parse(JSON.stringify(toRaw(player.songInfo)))
         updateCommon(getCleanSongInfo())
+
+        const { parseYrc, parseLrc, parseTTML, parseQrc } = await loadLyricParsers()
+        if (!active) return
 
         const parseCrLyricBySource = (source: string, text: string): LyricLine[] => {
           return source === 'tx' ? (parseQrc(text) as any) : (parseYrc(text) as any)
